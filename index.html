@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#5874d9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="每日课表">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <title>我的每日课表</title>
+  <style>
+    :root { --blue:#5874d9; --ink:#1e2a44; --muted:#7e8aa5; --line:#e6eaf3; --card:#f1f4ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f7f8fc; color:var(--ink); font-family:"Microsoft YaHei",system-ui,sans-serif; }
+    .wrap { max-width:1050px; margin:0 auto; padding:24px 18px 50px; }
+    header { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:22px; }
+    h1 { margin:0; font-size:28px; letter-spacing:1px; }
+    .sub { color:var(--muted); margin-top:7px; font-size:14px; }
+    .tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button, input { border:1px solid #dce2f0; border-radius:9px; background:white; color:var(--ink); padding:9px 12px; font:inherit; }
+    button { cursor:pointer; } button:hover { border-color:var(--blue); color:var(--blue); }
+    .date { font-weight:600; }
+    .layout { --slot-height:112px; display:grid; grid-template-columns:128px 1fr; gap:16px; }
+    .timeline { position:relative; }
+    .timeline:after { content:""; position:absolute; top:14px; bottom:14px; right:15px; width:2px; background:#aeb8d0; }
+    .slot { height:var(--slot-height); text-align:right; padding-right:28px; position:relative; }
+    .slot:after { content:""; position:absolute; right:9px; top:8px; width:12px; height:12px; background:#7b8495; border-radius:50%; z-index:1; }
+    .slot strong { display:block; font-size:16px; }
+    .slot small { display:block; color:#334d86; margin-top:25px; font-size:13px; }
+    .cards { min-height:calc(8 * var(--slot-height)); position:relative; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(8,var(--slot-height)); }
+    .course { grid-column:1; grid-row:var(--row-start) / var(--row-end); align-self:stretch; background:var(--card); border-radius:18px; padding:15px 21px; margin:6px 0; box-shadow:0 4px 13px rgba(65,82,140,.06); overflow:hidden; }
+    .course h2 { margin:0 0 10px; font-size:20px; font-weight:700; }
+    .course p { margin:7px 0; font-size:15px; }
+    .course .label { color:#667493; display:inline-block; min-width:54px; }
+    .course .note { color:#7180a0; font-size:13px; }
+    .empty { margin-top:36px; padding:42px 20px; text-align:center; color:var(--muted); background:white; border:1px dashed #d9deeb; border-radius:16px; }
+    .settings { margin-top:20px; padding:13px 15px; color:var(--muted); background:white; border-radius:12px; font-size:13px; }
+    .settings summary { cursor:pointer; color:var(--ink); font-weight:600; }
+    .settings label { display:inline-flex; align-items:center; gap:8px; margin-top:12px; }
+    @media (max-width:650px){ .wrap{padding:18px 10px 35px} header{display:block} .tools{margin-top:14px} .layout{--slot-height:118px;grid-template-columns:84px 1fr;gap:8px}.slot{padding-right:22px}.slot:after{right:3px}.timeline:after{right:9px}.slot strong{font-size:14px}.slot small{font-size:11px}.course{padding:14px 15px}.course h2{font-size:17px}.course p{font-size:14px} }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div>
+      <h1 id="title">我的每日课表</h1>
+      <div class="sub" id="meta"></div>
+    </div>
+    <div class="tools">
+      <button id="prev">‹ 前一天</button>
+      <input class="date" id="date" type="date">
+      <button id="next">后一天 ›</button>
+      <button id="today">回到今天</button>
+    </div>
+  </header>
+  <section class="layout">
+    <aside class="timeline" id="timeline"></aside>
+    <section class="cards" id="cards"></section>
+  </section>
+  <details class="settings">
+    <summary>课表设置</summary>
+    <label>学期第 1 周开始日期：<input id="semesterStart" type="date"></label>
+    <div>你的课表来自 2026—2027 学年第 1 学期。修改后会自动保存到本机浏览器。</div>
+  </details>
+</main>
+<script>
+const slots = [
+  ['第1节','08:20–09:05'],['第2节','09:05–09:50'],['第3节','10:05–10:50'],['第4节','10:50–11:35'],
+  ['第5节','12:45–13:30'],['第6节','13:30–14:15'],['第7节','14:30–15:15'],['第8节','15:15–16:00']
+];
+const courses = [
+  {day:1,start:3,end:4,name:'创新创业综合实践',weekStart:1,weekEnd:1,parity:'all',weeks:'第1周',teacher:'李敬磊',room:'三教120',code:'5789'},
+  {day:1,start:5,end:6,name:'创新创业综合实践',weekStart:1,weekEnd:1,parity:'all',weeks:'第1周',teacher:'李敬磊',room:'信息312',code:'5789'},
+  {day:1,start:5,end:6,name:'数据库应用系统实践',weekStart:9,weekEnd:12,parity:'all',weeks:'第9–12周',teacher:'张文菊',room:'计算中心130',code:'5784'},
+  {day:1,start:7,end:8,name:'数据库应用系统实践',weekStart:9,weekEnd:12,parity:'all',weeks:'第9–12周',teacher:'张文菊',room:'计算中心222',code:'5784'},
+  {day:1,start:5,end:8,name:'智能创新专题1',weekStart:17,weekEnd:18,parity:'all',weeks:'第17–18周',teacher:'展召敏',room:'校内实践–分散实践',code:'5786'},
+  {day:2,start:3,end:4,name:'创新创业综合实践',weekStart:1,weekEnd:1,parity:'all',weeks:'第1周',teacher:'李敬磊',room:'信息312',code:'5789'},
+  {day:2,start:5,end:8,name:'创新创业综合实践',weekStart:1,weekEnd:1,parity:'all',weeks:'第1周',teacher:'李敬磊',room:'计算中心415',code:'5789'},
+  {day:2,start:5,end:8,name:'智能创新专题1',weekStart:17,weekEnd:18,parity:'all',weeks:'第17–18周',teacher:'展召敏',room:'校内实践–分散实践',code:'5786'},
+  {day:3,start:1,end:2,name:'鸿蒙操作系统',weekStart:1,weekEnd:16,parity:'all',weeks:'第1–16周',teacher:'戴志晃',room:'信息410',code:'5785'},
+  {day:3,start:3,end:4,name:'鸿蒙操作系统',weekStart:1,weekEnd:15,parity:'odd',weeks:'第1–15周（单周）',teacher:'戴志晃',room:'信息410',code:'5785'},
+  {day:3,start:5,end:6,name:'嵌入式操作系统',weekStart:1,weekEnd:15,parity:'odd',weeks:'第1–15周（单周）',teacher:'程涛',room:'信息310',code:'5782'},
+  {day:3,start:7,end:8,name:'创新创业综合实践',weekStart:1,weekEnd:1,parity:'all',weeks:'第1周',teacher:'李敬磊',room:'信息320',code:'5789'},
+  {day:4,start:1,end:2,name:'人工智能概论',weekStart:2,weekEnd:16,parity:'even',weeks:'第2–16周（双周）',teacher:'张鹿鸣',room:'一教104',code:'5791'},
+  {day:4,start:3,end:4,name:'人工智能概论',weekStart:1,weekEnd:15,parity:'odd',weeks:'第1–15周（单周）',teacher:'张鹿鸣',room:'信息312',code:'5791'},
+  {day:4,start:5,end:6,name:'创新创业综合实践',weekStart:1,weekEnd:1,parity:'all',weeks:'第1周',teacher:'李敬磊',room:'信息312',code:'5789'},
+  {day:5,start:3,end:4,name:'创新创业综合实践',weekStart:1,weekEnd:1,parity:'all',weeks:'第1周',teacher:'李敬磊',room:'信息405',code:'5789'},
+  {day:5,start:5,end:6,name:'嵌入式操作系统',weekStart:1,weekEnd:16,parity:'all',weeks:'第1–16周',teacher:'程涛',room:'信息310',code:'5782'}
+];
+const weekNames=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+const defaultStart='2026-09-07';
+const $=id=>document.getElementById(id);
+let selected = new Date(); selected.setHours(12,0,0,0);
+function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)}
+function parse(s){const [y,m,day]=s.split('-').map(Number);return new Date(y,m-1,day,12)}
+function weekInfo(d){const start=parse(localStorage.semesterStart||defaultStart); const diff=Math.floor((d-start)/86400000); return {week:Math.floor(diff/7)+1, valid:diff>=0};}
+function active(c,info){
+  if(!info.valid||info.week<c.weekStart||info.week>c.weekEnd)return false;
+  if(c.parity==='odd')return info.week%2===1;
+  if(c.parity==='even')return info.week%2===0;
+  return true;
+}
+function courseTime(c){return `${slots[c.start-1][1].split('–')[0]}–${slots[c.end-1][1].split('–')[1]}`;}
+function render(){
+  $('date').value=iso(selected); const info=weekInfo(selected); const day=selected.getDay();
+  $('title').textContent=`${weekNames[day]} · ${selected.getMonth()+1}月${selected.getDate()}日`;
+  $('meta').textContent=info.valid?`2026—2027 学年第 1 学期 · 第 ${info.week} 周`:'学期开始日期之前';
+  $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
+  const list=courses.filter(c=>c.day===day && active(c,info));
+  $('cards').innerHTML=list.length?list.map(c=>`<article class="course" style="--row-start:${c.start};--row-end:${c.end+1}"><h2>${c.name}</h2><p><span class="label">节次</span>第${c.start}–${c.end}节　<span class="label">时间</span>${courseTime(c)}</p><p><span class="label">教师</span>${c.teacher}　<span class="label">地点</span>${c.room}</p><p class="note">课程号 ${c.code} · ${c.weeks} · 计科B24-1</p></article>`).join(''):`<div class="empty">今天没有安排课程</div>`;
+}
+$('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
+$('prev').onclick=()=>{selected.setDate(selected.getDate()-1);render()}; $('next').onclick=()=>{selected.setDate(selected.getDate()+1);render()}; $('today').onclick=()=>{selected=new Date();selected.setHours(12,0,0,0);render()};
+$('semesterStart').value=localStorage.semesterStart||defaultStart; $('semesterStart').onchange=e=>{localStorage.semesterStart=e.target.value;render()};
+render();
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
