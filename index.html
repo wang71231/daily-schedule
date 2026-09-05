@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#5874d9">
+  <meta name="theme-color" content="#4657d7">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="每日课表">
@@ -12,35 +12,67 @@
   <link rel="apple-touch-icon" href="./icon-192.png">
   <title>我的每日课表</title>
   <style>
-    :root { --blue:#5874d9; --ink:#1e2a44; --muted:#7e8aa5; --line:#e6eaf3; --card:#f1f4ff; }
+    :root { --blue:#5265e8; --blue-deep:#3547c8; --ink:#172039; --muted:#6f7992; --line:#e4e9f4; --surface:rgba(255,255,255,.92); }
     * { box-sizing:border-box; }
-    body { margin:0; background:#f7f8fc; color:var(--ink); font-family:"Microsoft YaHei",system-ui,sans-serif; }
-    .wrap { max-width:1050px; margin:0 auto; padding:24px 18px 50px; }
-    header { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:22px; }
-    h1 { margin:0; font-size:28px; letter-spacing:1px; }
-    .sub { color:var(--muted); margin-top:7px; font-size:14px; }
+    body { margin:0; min-height:100vh; background:radial-gradient(circle at 8% 0%,#e7ebff 0,transparent 34%),radial-gradient(circle at 95% 18%,#e9f8ff 0,transparent 28%),#f5f7fc; color:var(--ink); font-family:"Microsoft YaHei",system-ui,sans-serif; }
+    button,input { -webkit-tap-highlight-color:transparent; }
+    .wrap { max-width:1020px; margin:0 auto; padding:26px 18px 56px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:20px; padding:26px 28px; border-radius:26px; color:white; background:linear-gradient(135deg,#5368ed 0%,#4555cf 58%,#3745b2 100%); box-shadow:0 18px 45px rgba(62,78,183,.24); }
+    h1 { margin:0; font-size:30px; line-height:1.25; letter-spacing:.5px; }
+    .sub { display:inline-flex; margin-top:10px; padding:5px 10px; border:1px solid rgba(255,255,255,.24); border-radius:999px; color:rgba(255,255,255,.86); background:rgba(255,255,255,.1); font-size:13px; }
     .tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    button, input { border:1px solid #dce2f0; border-radius:9px; background:white; color:var(--ink); padding:9px 12px; font:inherit; }
-    button { cursor:pointer; } button:hover { border-color:var(--blue); color:var(--blue); }
-    .date { font-weight:600; }
-    .layout { --slot-height:112px; display:grid; grid-template-columns:128px 1fr; gap:16px; }
+    button,input { min-height:42px; border:1px solid rgba(255,255,255,.4); border-radius:12px; background:rgba(255,255,255,.96); color:var(--ink); padding:9px 13px; font:inherit; transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease; }
+    button { cursor:pointer; font-weight:600; } button:hover { transform:translateY(-1px); border-color:white; box-shadow:0 7px 18px rgba(17,30,89,.16); }
+    button:active { transform:translateY(0); }
+    .date { min-width:152px; font-weight:700; }
+    .layout { --slot-height:112px; display:grid; grid-template-columns:118px 1fr; gap:14px; padding:18px; border:1px solid rgba(222,228,241,.82); border-radius:26px; background:var(--surface); box-shadow:0 14px 40px rgba(38,52,101,.08); backdrop-filter:blur(10px); }
     .timeline { position:relative; }
-    .timeline:after { content:""; position:absolute; top:14px; bottom:14px; right:15px; width:2px; background:#aeb8d0; }
-    .slot { height:var(--slot-height); text-align:right; padding-right:28px; position:relative; }
-    .slot:after { content:""; position:absolute; right:9px; top:8px; width:12px; height:12px; background:#7b8495; border-radius:50%; z-index:1; }
-    .slot strong { display:block; font-size:16px; }
-    .slot small { display:block; color:#334d86; margin-top:25px; font-size:13px; }
+    .timeline:after { content:""; position:absolute; top:14px; bottom:14px; right:13px; width:2px; background:linear-gradient(#7081ee,#c8d1f6); }
+    .slot { height:var(--slot-height); text-align:right; padding-right:27px; position:relative; }
+    .slot:after { content:""; position:absolute; right:7px; top:7px; width:12px; height:12px; border:3px solid #eef1ff; background:#6072e7; border-radius:50%; z-index:1; box-shadow:0 0 0 2px rgba(96,114,231,.18); }
+    .slot strong { display:block; padding-top:1px; font-size:15px; }
+    .slot small { display:block; color:#65739a; margin-top:23px; font-size:12px; line-height:1.4; }
     .cards { min-height:calc(8 * var(--slot-height)); position:relative; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(8,var(--slot-height)); }
-    .course { grid-column:1; grid-row:var(--row-start) / var(--row-end); align-self:stretch; background:var(--card); border-radius:18px; padding:15px 21px; margin:6px 0; box-shadow:0 4px 13px rgba(65,82,140,.06); overflow:hidden; }
-    .course h2 { margin:0 0 10px; font-size:20px; font-weight:700; }
-    .course p { margin:7px 0; font-size:15px; }
-    .course .label { color:#667493; display:inline-block; min-width:54px; }
-    .course .note { color:#7180a0; font-size:13px; }
-    .empty { margin-top:36px; padding:42px 20px; text-align:center; color:var(--muted); background:white; border:1px dashed #d9deeb; border-radius:16px; }
-    .settings { margin-top:20px; padding:13px 15px; color:var(--muted); background:white; border-radius:12px; font-size:13px; }
-    .settings summary { cursor:pointer; color:var(--ink); font-weight:600; }
-    .settings label { display:inline-flex; align-items:center; gap:8px; margin-top:12px; }
-    @media (max-width:650px){ .wrap{padding:18px 10px 35px} header{display:block} .tools{margin-top:14px} .layout{--slot-height:118px;grid-template-columns:84px 1fr;gap:8px}.slot{padding-right:22px}.slot:after{right:3px}.timeline:after{right:9px}.slot strong{font-size:14px}.slot small{font-size:11px}.course{padding:14px 15px}.course h2{font-size:17px}.course p{font-size:14px} }
+    .course { --accent:#5265e8; --tint:#f0f3ff; grid-column:1; grid-row:var(--row-start) / var(--row-end); align-self:stretch; position:relative; padding:17px 20px 15px 24px; margin:6px 0; overflow:hidden; border:1px solid rgba(100,116,170,.12); border-radius:19px; background:linear-gradient(135deg,var(--tint) 0%,#fff 72%); box-shadow:0 8px 22px rgba(42,56,112,.08); }
+    .course:before { content:""; position:absolute; inset:0 auto 0 0; width:5px; background:var(--accent); }
+    .course[data-code="5789"] { --accent:#7957d5; --tint:#f5f1ff; }
+    .course[data-code="5784"] { --accent:#159c91; --tint:#edf9f7; }
+    .course[data-code="5786"] { --accent:#dc842e; --tint:#fff6e9; }
+    .course[data-code="5785"] { --accent:#4973df; --tint:#eef4ff; }
+    .course[data-code="5782"] { --accent:#269b68; --tint:#edf9f3; }
+    .course[data-code="5791"] { --accent:#cf5a85; --tint:#fff0f5; }
+    .course-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .course h2 { margin:0; color:var(--ink); font-size:20px; line-height:1.35; font-weight:750; }
+    .week-tag { flex:0 0 auto; padding:4px 9px; border-radius:999px; color:var(--accent); background:white; box-shadow:0 2px 8px rgba(35,48,99,.07); font-size:12px; font-weight:700; }
+    .course-time { margin-top:12px; color:var(--accent); font-size:15px; font-weight:700; }
+    .course-time span { margin-left:12px; color:#34405d; font-weight:600; }
+    .course-details { display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:10px; color:#4f5c77; font-size:14px; }
+    .course-details b { color:#7b859d; font-weight:500; margin-right:6px; }
+    .course .note { margin:10px 0 0; color:#8a94aa; font-size:12px; }
+    .empty { grid-column:1; grid-row:1 / 4; align-self:start; margin-top:6px; padding:62px 20px; text-align:center; color:var(--muted); background:linear-gradient(135deg,#f7f8ff,#fff); border:1px dashed #cfd7eb; border-radius:19px; }
+    .empty:before { content:"☕"; display:block; margin-bottom:10px; font-size:32px; }
+    .settings { margin-top:16px; padding:15px 18px; color:var(--muted); background:rgba(255,255,255,.9); border:1px solid var(--line); border-radius:16px; font-size:13px; box-shadow:0 8px 24px rgba(38,52,101,.05); }
+    .settings summary { cursor:pointer; color:var(--ink); font-weight:700; }
+    .settings label { display:inline-flex; align-items:center; gap:8px; margin:14px 0 8px; }
+    .settings input { border-color:#d9e0ee; }
+    @media (max-width:720px){
+      .wrap{padding:12px 8px 34px}
+      header{display:block;padding:20px 16px;border-radius:22px;margin-bottom:12px}
+      h1{font-size:25px}
+      .sub{font-size:12px}
+      .tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:16px;gap:7px}
+      .tools button{padding:8px 6px;font-size:13px}
+      #date{grid-column:1/-1;grid-row:1;width:100%}
+      #prev{grid-column:1;grid-row:2} #next{grid-column:2;grid-row:2} #today{grid-column:3;grid-row:2}
+      .layout{--slot-height:118px;grid-template-columns:78px 1fr;gap:7px;padding:12px 8px;border-radius:22px}
+      .slot{padding-right:20px}.slot:after{right:1px}.timeline:after{right:7px}
+      .slot strong{font-size:13px}.slot small{font-size:10px;margin-top:23px}
+      .course{padding:14px 12px 12px 17px;border-radius:16px}
+      .course h2{font-size:17px}.week-tag{padding:3px 7px;font-size:10px}
+      .course-time{margin-top:9px;font-size:13px}.course-time span{display:block;margin:3px 0 0}
+      .course-details{gap:5px 12px;margin-top:7px;font-size:12px}
+      .course .note{margin-top:7px;font-size:10px}
+    }
   </style>
 </head>
 <body>
@@ -107,11 +139,11 @@ function active(c,info){
 function courseTime(c){return `${slots[c.start-1][1].split('–')[0]}–${slots[c.end-1][1].split('–')[1]}`;}
 function render(){
   $('date').value=iso(selected); const info=weekInfo(selected); const day=selected.getDay();
-  $('title').textContent=`${weekNames[day]} · ${selected.getMonth()+1}月${selected.getDate()}日`;
-  $('meta').textContent=info.valid?`2026—2027 学年第 1 学期 · 第 ${info.week} 周`:'学期开始日期之前';
-  $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
   const list=courses.filter(c=>c.day===day && active(c,info));
-  $('cards').innerHTML=list.length?list.map(c=>`<article class="course" style="--row-start:${c.start};--row-end:${c.end+1}"><h2>${c.name}</h2><p><span class="label">节次</span>第${c.start}–${c.end}节　<span class="label">时间</span>${courseTime(c)}</p><p><span class="label">教师</span>${c.teacher}　<span class="label">地点</span>${c.room}</p><p class="note">课程号 ${c.code} · ${c.weeks} · 计科B24-1</p></article>`).join(''):`<div class="empty">今天没有安排课程</div>`;
+  $('title').textContent=`${weekNames[day]} · ${selected.getMonth()+1}月${selected.getDate()}日`;
+  $('meta').textContent=info.valid?`第 ${info.week} 周 · ${list.length ? `${list.length} 个课程安排` : '今天没有课程'}`:'学期开始日期之前';
+  $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
+  $('cards').innerHTML=list.length?list.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.end+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${c.weeks}</span></div><div class="course-time">第${c.start}–${c.end}节<span>${courseTime(c)}</span></div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>教师</b>${c.teacher}</span></div><p class="note">课程号 ${c.code} · 计科B24-1</p></article>`).join(''):`<div class="empty">今天没有安排课程</div>`;
 }
 $('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
 $('prev').onclick=()=>{selected.setDate(selected.getDate()-1);render()}; $('next').onclick=()=>{selected.setDate(selected.getDate()+1);render()}; $('today').onclick=()=>{selected=new Date();selected.setHours(12,0,0,0);render()};
