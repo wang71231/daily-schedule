@@ -55,6 +55,22 @@
     .settings summary { cursor:pointer; color:var(--ink); font-weight:700; }
     .settings label { display:inline-flex; align-items:center; gap:8px; margin:14px 0 8px; }
     .settings input { border-color:#d9e0ee; }
+    .worklog { margin-top:16px; padding:18px; border:1px solid rgba(220,226,243,.9); border-radius:22px; background:rgba(255,255,255,.94); box-shadow:0 10px 28px rgba(38,52,101,.06); }
+    .worklog-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .worklog h2 { margin:0; font-size:19px; }
+    .worklog-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .worklog-actions button { min-height:36px; padding:7px 10px; border-color:#d9dfed; font-size:13px; }
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+    .summary-item { padding:10px 8px; border-radius:12px; background:#f3f4f8; text-align:center; }
+    .summary-item strong { display:block; color:var(--blue-deep); font-size:18px; }
+    .summary-item small { color:var(--muted); font-size:11px; }
+    .rate { display:flex; align-items:center; gap:8px; margin-bottom:14px; color:var(--muted); font-size:13px; }
+    .rate input { width:100px; min-height:36px; padding:6px 9px; border-color:#d9e0ee; }
+    .log-row { display:grid; grid-template-columns:minmax(0,1fr) 102px 78px; gap:9px; align-items:center; padding:12px 0; border-top:1px solid #edf0f5; }
+    .log-name { min-width:0; font-weight:700; font-size:14px; }
+    .log-name small { display:block; margin-top:4px; color:var(--muted); font-size:12px; font-weight:400; overflow-wrap:anywhere; }
+    .log-row select,.log-row input { width:100%; min-height:36px; padding:6px 7px; border:1px solid #d9e0ee; border-radius:9px; background:#fff; color:var(--ink); font:inherit; font-size:12px; }
+    .log-empty { color:var(--muted); font-size:13px; padding:10px 0 2px; }
     @media (max-width:720px){
       .wrap{padding:12px 8px 34px}
       header{display:block;padding:20px 16px;border-radius:22px;margin-bottom:12px}
@@ -73,6 +89,9 @@
       .course-details{display:block;margin-top:7px;font-size:12px}
       .course-details span{display:block;margin-top:3px}
       .course .note{margin-top:7px;font-size:10px}
+      .worklog{padding:14px 12px;border-radius:18px}.worklog-head{align-items:flex-start;display:block}.worklog-actions{margin-top:10px}
+      .summary{gap:5px}.summary-item{padding:9px 4px}.summary-item strong{font-size:16px}
+      .rate{flex-wrap:wrap}.log-row{grid-template-columns:minmax(0,1fr) 82px 66px;gap:6px}.log-name{font-size:13px}.log-name small{font-size:11px}
     }
   </style>
 </head>
@@ -93,6 +112,12 @@
   <section class="layout">
     <aside class="timeline" id="timeline"></aside>
     <section class="cards" id="cards"></section>
+  </section>
+  <section class="worklog">
+    <div class="worklog-head"><h2>课时记录</h2><div class="worklog-actions"><button id="exportCsv">导出记录</button><button id="clearLogs">清空记录</button></div></div>
+    <div class="summary" id="summary"></div>
+    <label class="rate">每小时工资：<input id="hourlyRate" type="number" min="0" step="0.01" inputmode="decimal"> 元</label>
+    <div id="logRows"></div>
   </section>
   <details class="settings">
     <summary>课表说明</summary>
@@ -120,10 +145,34 @@ const weekNames=['星期日','星期一','星期二','星期三','星期四','�
 const defaultStart='2026-09-07';
 const $=id=>document.getElementById(id);
 let selected = new Date(); selected.setHours(12,0,0,0);
+let logs = JSON.parse(localStorage.trainingLogs || '{}');
 function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)}
 function parse(s){const [y,m,day]=s.split('-').map(Number);return new Date(y,m-1,day,12)}
 function weekInfo(d){const start=parse(defaultStart); const diff=Math.floor((d-start)/86400000); return {week:Math.floor(diff/7)+1, valid:diff>=0};}
 function active(c,d){return d>=parse(c.date);}
+function hours(c){const [a,b]=c.time.split('–').map(v=>{const [h,m]=v.split(':').map(Number);return h+m/60});return +(b-a).toFixed(2);}
+function logKey(c,date=iso(selected)){return `${date}|${c.code}`;}
+function recordFor(c){const key=logKey(c);return logs[key]||{date:iso(selected),day:c.day,code:c.code,name:c.name,room:c.room,time:c.time,status:'pending',hours:hours(c)};}
+function saveLogs(){localStorage.trainingLogs=JSON.stringify(logs);}
+function totals(){
+  const completed=Object.values(logs).filter(v=>v.status==='done');
+  const total=completed.reduce((sum,v)=>sum+Number(v.hours||0),0);
+  const now=selected.getFullYear()+'-'+String(selected.getMonth()+1).padStart(2,'0');
+  const month=completed.filter(v=>v.date.startsWith(now)).reduce((sum,v)=>sum+Number(v.hours||0),0);
+  const weekStart=new Date(selected); weekStart.setDate(selected.getDate()-((selected.getDay()+6)%7));
+  const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+  const week=completed.filter(v=>{const d=parse(v.date);return d>=weekStart&&d<=weekEnd}).reduce((sum,v)=>sum+Number(v.hours||0),0);
+  const rate=Number(localStorage.trainingRate||0);
+  return {total,month,week,pay:total*rate};
+}
+function renderLog(list){
+  const t=totals();
+  $('summary').innerHTML=`<div class="summary-item"><strong>${t.week.toFixed(2)} h</strong><small>本周课时</small></div><div class="summary-item"><strong>${t.month.toFixed(2)} h</strong><small>本月课时</small></div><div class="summary-item"><strong>¥${t.pay.toFixed(2)}</strong><small>累计工资</small></div>`;
+  $('hourlyRate').value=localStorage.trainingRate||'';
+  $('logRows').innerHTML=list.length?list.map(c=>{const v=recordFor(c);return `<div class="log-row"><div class="log-name">${c.name}<small>${c.room} · 计划 ${c.time} · ${hours(c).toFixed(2)} 小时</small></div><select data-log="${c.code}" class="log-status"><option value="pending" ${v.status==='pending'?'selected':''}>未记录</option><option value="done" ${v.status==='done'?'selected':''}>已完成</option><option value="leave" ${v.status==='leave'?'selected':''}>请假</option><option value="cancel" ${v.status==='cancel'?'selected':''}>取消</option></select><input data-hours="${c.code}" class="log-hours" type="number" min="0" step="0.01" value="${v.hours??hours(c)}" aria-label="实际课时"></div>`}).join(''):`<div class="log-empty">当天没有可记录的课程</div>`;
+  document.querySelectorAll('.log-status').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.log);const v=recordFor(c);v.status=el.value;logs[logKey(c)]=v;saveLogs();renderLog(list);});
+  document.querySelectorAll('.log-hours').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.hours);const v=recordFor(c);v.hours=Math.max(0,Number(el.value)||0);logs[logKey(c)]=v;saveLogs();renderLog(list);});
+}
 function render(){
   $('date').value=iso(selected); const info=weekInfo(selected); const day=selected.getDay();
   const list=courses.filter(c=>c.day===day && active(c,selected)).sort((a,b)=>a.start-b.start);
@@ -131,9 +180,13 @@ function render(){
   $('meta').textContent=info.valid?`第 ${info.week} 周 · ${list.length ? `${list.length} 个课程安排` : '今天没有课程'}`:'课程开始日期之前';
   $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
   $('cards').innerHTML=list.length?list.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join(''):`<div class="empty">今天没有安排课程</div>`;
+  renderLog(list);
 }
 $('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
 $('prev').onclick=()=>{selected.setDate(selected.getDate()-1);render()}; $('next').onclick=()=>{selected.setDate(selected.getDate()+1);render()}; $('today').onclick=()=>{selected=new Date();selected.setHours(12,0,0,0);render()};
+$('hourlyRate').onchange=e=>{localStorage.trainingRate=Math.max(0,Number(e.target.value)||0);render()};
+$('clearLogs').onclick=()=>{if(confirm('确定清空全部课时记录吗？')){logs={};saveLogs();render()}};
+$('exportCsv').onclick=()=>{const rows=[['日期','星期','课程','地点','计划时间','状态','实际课时','工资']];Object.values(logs).sort((a,b)=>a.date.localeCompare(b.date)).forEach(v=>rows.push([v.date,weekNames[v.day],v.name,v.room,v.time,v.status,Number(v.hours||0),(v.status==='done'?Number(v.hours||0)*Number(localStorage.trainingRate||0):0).toFixed(2)]));const csv='\uFEFF'+rows.map(row=>row.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='体培课时记录.csv';a.click();URL.revokeObjectURL(a.href);};
 render();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
