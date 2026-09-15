@@ -5,138 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#59679f">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="每日课表">
+  <meta name="apple-mobile-web-app-title" content="我的课表">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icon-192.png">
-  <title>体培课程表</title>
+  <title>我的课表</title>
   <style>
-    :root { --blue:#59679f; --blue-deep:#414f8b; --ink:#172039; --muted:#70798f; --line:#e2e5ee; --surface:rgba(255,255,255,.94); }
-    * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; background:radial-gradient(circle at 8% 0%,#e9ebf5 0,transparent 34%),radial-gradient(circle at 95% 18%,#e7f2f0 0,transparent 28%),#f6f7fa; color:var(--ink); font-family:"Microsoft YaHei",system-ui,sans-serif; }
-    button,input { -webkit-tap-highlight-color:transparent; }
-    .wrap { max-width:1020px; margin:0 auto; padding:26px 18px 56px; }
-    header { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:20px; padding:26px 28px; border-radius:26px; color:white; background:linear-gradient(135deg,#6876b5 0%,#5967a1 58%,#4b588d 100%); box-shadow:0 16px 38px rgba(66,76,133,.18); }
-    h1 { margin:0; font-size:30px; line-height:1.25; letter-spacing:.5px; }
-    .sub { display:inline-flex; margin-top:10px; padding:5px 10px; border:1px solid rgba(255,255,255,.24); border-radius:999px; color:rgba(255,255,255,.86); background:rgba(255,255,255,.1); font-size:13px; }
-    .tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    button,input { min-height:42px; border:1px solid rgba(255,255,255,.4); border-radius:12px; background:rgba(255,255,255,.96); color:var(--ink); padding:9px 13px; font:inherit; transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease; }
-    button { cursor:pointer; font-weight:600; } button:hover { transform:translateY(-1px); border-color:white; box-shadow:0 7px 18px rgba(17,30,89,.16); }
-    button:active { transform:translateY(0); }
-    .date { min-width:152px; font-weight:700; }
-    .layout { --slot-height:106px; display:grid; grid-template-columns:150px 1fr; gap:14px; padding:18px; border:1px solid rgba(220,226,243,.9); border-radius:26px; background:var(--surface); box-shadow:0 12px 34px rgba(38,52,101,.08); backdrop-filter:blur(10px); }
-    .timeline { position:relative; }
-    .timeline:after { content:""; position:absolute; top:14px; bottom:14px; right:13px; width:2px; background:linear-gradient(#8792bd,#d1d6e6); }
-    .slot { height:var(--slot-height); text-align:right; padding-right:27px; position:relative; }
-    .slot:after { content:""; position:absolute; right:7px; top:7px; width:12px; height:12px; border:3px solid #f0f1f7; background:#7480ad; border-radius:50%; z-index:1; box-shadow:0 0 0 2px rgba(116,128,173,.16); }
-    .slot strong { display:block; padding-top:1px; font-size:15px; }
-    .slot small { display:block; color:#65739a; margin-top:17px; font-size:12px; line-height:1.4; white-space:nowrap; }
-    .cards { min-height:calc(9 * var(--slot-height)); position:relative; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(9,var(--slot-height)); }
-    .course { --accent:#6877ad; --tint:#f1f3f9; grid-column:1; grid-row:var(--row-start) / var(--row-end); align-self:stretch; position:relative; padding:17px 20px 15px 24px; margin:6px 0; overflow:hidden; border:1px solid rgba(100,110,150,.14); border-radius:19px; background:linear-gradient(135deg,var(--tint) 0%,#fff 72%); box-shadow:0 7px 19px rgba(42,56,112,.065); }
-    .course:before { content:""; position:absolute; inset:0 auto 0 0; width:5px; background:var(--accent); }
-    .course[data-code="5789"] { --accent:#806fa8; --tint:#f3f0f8; }
-    .course[data-code="5784"] { --accent:#579590; --tint:#edf6f4; }
-    .course[data-code="5786"] { --accent:#bd8b53; --tint:#faf4eb; }
-    .course[data-code="5785"] { --accent:#6680b3; --tint:#eef2f8; }
-    .course[data-code="5782"] { --accent:#63977e; --tint:#eef6f1; }
-    .course[data-code="5791"] { --accent:#b87891; --tint:#f8eff3; }
-    .course-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-    .course h2 { margin:0; color:var(--ink); font-size:20px; line-height:1.35; font-weight:750; }
-    .week-tag { flex:0 0 auto; padding:4px 9px; border-radius:999px; color:var(--accent); background:white; box-shadow:0 2px 8px rgba(35,48,99,.07); font-size:12px; font-weight:700; }
-    .course-time { margin-top:12px; color:var(--accent); font-size:15px; font-weight:700; }
-    .course-time span { margin-left:12px; color:#34405d; font-weight:600; }
-    .course-details { display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:10px; color:#4f5c77; font-size:14px; }
-    .course-details b { color:#7b859d; font-weight:500; margin-right:6px; }
-    .course .note { margin:10px 0 0; color:#8a94aa; font-size:12px; }
-    .empty { grid-column:1; grid-row:1 / 4; align-self:start; margin-top:6px; padding:62px 20px; text-align:center; color:var(--muted); background:linear-gradient(135deg,#f7f8ff,#fff); border:1px dashed #cfd7eb; border-radius:19px; }
-    .empty:before { content:"☕"; display:block; margin-bottom:10px; font-size:32px; }
-    .settings { margin-top:16px; padding:15px 18px; color:var(--muted); background:rgba(255,255,255,.9); border:1px solid var(--line); border-radius:16px; font-size:13px; box-shadow:0 8px 24px rgba(38,52,101,.05); }
-    .settings summary { cursor:pointer; color:var(--ink); font-weight:700; }
-    .settings label { display:inline-flex; align-items:center; gap:8px; margin:14px 0 8px; }
-    .settings input { border-color:#d9e0ee; }
-    @media (max-width:720px){
-      .wrap{padding:12px 8px 34px}
-      header{display:block;padding:20px 16px;border-radius:22px;margin-bottom:12px}
-      h1{font-size:25px}
-      .sub{font-size:12px}
-      .tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:16px;gap:7px}
-      .tools button{padding:8px 6px;font-size:13px}
-      #date{grid-column:1/-1;grid-row:1;width:100%}
-      #prev{grid-column:1;grid-row:2} #next{grid-column:2;grid-row:2} #today{grid-column:3;grid-row:2}
-      .layout{--slot-height:112px;grid-template-columns:93px 1fr;gap:7px;padding:12px 8px;border-radius:22px}
-      .slot{padding-right:20px}.slot:after{right:1px}.timeline:after{right:7px}
-      .slot strong{font-size:13px}.slot small{font-size:10px;margin-top:17px}
-      .course{padding:14px 12px 12px 17px;border-radius:16px}
-      .course h2{font-size:17px}.week-tag{padding:3px 7px;font-size:10px}
-      .course-time{margin-top:9px;font-size:13px}.course-time span{display:block;margin:3px 0 0}
-      .course-details{gap:5px 12px;margin-top:7px;font-size:12px}
-      .course .note{margin-top:7px;font-size:10px}
-    }
+    :root{--ink:#172039;--muted:#70798f;--line:#e2e5ee}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:#f6f7fa;color:var(--ink);font-family:"Microsoft YaHei",system-ui,sans-serif}
+    main{max-width:680px;margin:0 auto;padding:28px 18px}
+    header{padding:26px 24px;border-radius:22px;color:white;background:linear-gradient(135deg,#6876b5,#4b588d);box-shadow:0 14px 30px rgba(66,76,133,.16)}
+    h1{margin:0;font-size:28px}
+    p{margin:9px 0 0;color:rgba(255,255,255,.82)}
+    .links{display:grid;gap:14px;margin-top:18px}
+    a{display:block;padding:21px 22px;border:1px solid var(--line);border-radius:16px;background:#fff;color:var(--ink);text-decoration:none;box-shadow:0 7px 20px rgba(38,52,101,.07)}
+    a:hover{border-color:#9da8c8}
+    strong{display:block;font-size:18px}
+    span{display:block;margin-top:6px;color:var(--muted);font-size:13px}
   </style>
 </head>
 <body>
-<main class="wrap">
-  <header>
-    <div>
-  <h1 id="title">体培课程表</h1>
-      <div class="sub" id="meta"></div>
-    </div>
-    <div class="tools">
-      <button id="prev">‹ 前一天</button>
-      <input class="date" id="date" type="date">
-      <button id="next">后一天 ›</button>
-      <button id="today">回到今天</button>
-    </div>
-  </header>
-  <section class="layout">
-    <aside class="timeline" id="timeline"></aside>
-    <section class="cards" id="cards"></section>
-  </section>
-  <details class="settings">
-    <summary>课表说明</summary>
-    <div>课程按图片中的具体日期和星期显示，老师均为胡翊铭。</div>
-  </details>
-</main>
-<script>
-const slots = [
-  ['上午','09:00–12:00'],['上午','09:45–10:45'],['下午','14:10–15:40'],
-  ['下午','15:00–18:00'],['下午','15:30–17:00'],['下午','15:40–17:00'],
-  ['下午','15:45–17:30'],['下午','16:00–17:30'],['下午','16:30–17:20']
-];
-const courses = [
-  {day:1,start:5,name:'啦啦操进校课程',room:'嘉定江桥小学',time:'15:30–17:00',date:'2026-09-07',code:'monday'},
-  {day:2,start:8,name:'啦啦操进校课程',room:'中山北路第一小学',time:'16:00–17:30',date:'2026-09-08',code:'tuesday'},
-  {day:3,start:7,name:'啦啦操进校课程',room:'复旦德富路小学',time:'15:45–17:30',date:'2026-09-16',code:'wednesday'},
-  {day:4,start:6,name:'啦啦操进校课程',room:'复旦徐汇实验小学',time:'15:40–17:00',date:'2026-09-17',code:'thursday'},
-  {day:5,start:2,name:'俱乐部课程',room:'嘉秀幼儿园',time:'09:45–10:45',date:'2026-09-18',code:'friday-morning'},
-  {day:5,start:3,name:'俱乐部课程',room:'嘉城学校二年级校队（山羊馆）',time:'14:10–15:40',date:'2026-09-18',code:'friday-afternoon'},
-  {day:5,start:9,name:'俱乐部课程',room:'悦庭幼儿园（延时课）',time:'16:30–17:20',date:'2026-09-18',code:'friday-evening'},
-  {day:0,start:1,name:'俱乐部课程',room:'幸城学校4–5年级校队',time:'09:00–12:00',date:'2026-09-13',code:'sunday-morning'},
-  {day:0,start:4,name:'俱乐部课程',room:'体殷精英2队',time:'15:00–18:00',date:'2026-09-13',code:'sunday-afternoon'}
-];
-const weekNames=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
-const defaultStart='2026-09-07';
-const $=id=>document.getElementById(id);
-let selected = new Date(); selected.setHours(12,0,0,0);
-function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)}
-function parse(s){const [y,m,day]=s.split('-').map(Number);return new Date(y,m-1,day,12)}
-function weekInfo(d){const start=parse(defaultStart); const diff=Math.floor((d-start)/86400000); return {week:Math.floor(diff/7)+1, valid:diff>=0};}
-function active(c,d){return d>=parse(c.date);}
-function render(){
-  $('date').value=iso(selected); const info=weekInfo(selected); const day=selected.getDay();
-  const list=courses.filter(c=>c.day===day && active(c,selected)).sort((a,b)=>a.start-b.start);
-  $('title').textContent=`${weekNames[day]} · ${selected.getMonth()+1}月${selected.getDate()}日`;
-  $('meta').textContent=info.valid?`第 ${info.week} 周 · ${list.length ? `${list.length} 个课程安排` : '今天没有课程'}`:'课程开始日期之前';
-  $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
-  $('cards').innerHTML=list.length?list.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join(''):`<div class="empty">今天没有安排课程</div>`;
-}
-$('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
-$('prev').onclick=()=>{selected.setDate(selected.getDate()-1);render()}; $('next').onclick=()=>{selected.setDate(selected.getDate()+1);render()}; $('today').onclick=()=>{selected=new Date();selected.setHours(12,0,0,0);render()};
-render();
-if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
-}
-</script>
+  <main>
+    <header><h1>我的课表</h1><p>选择要查看的课程安排</p></header>
+    <section class="links">
+      <a href="./university.html"><strong>大学课程表</strong><span>按教学周和第几节查看</span></a>
+      <a href="./training.html"><strong>体培课程表</strong><span>按实际时间查看 2026 下半年安排</span></a>
+    </section>
+  </main>
 </body>
 </html>

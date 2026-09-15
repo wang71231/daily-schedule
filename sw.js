@@ -2,6 +2,8 @@ const CACHE_NAME = 'daily-schedule-v4';
 const APP_FILES = [
   './',
   './index.html',
+  './university.html',
+  './training.html',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
