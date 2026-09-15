@@ -221,7 +221,9 @@ function render(){
   $('title').textContent=`${weekNames[day]} · ${selected.getMonth()+1}月${selected.getDate()}日`;
   $('meta').textContent=info.valid?`第 ${info.week} 周 · ${list.length ? `${list.length} 个课程安排` : '今天没有课程'}`:'课程开始日期之前';
   $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
-  $('cards').innerHTML=fixed.length?fixed.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join(''):`<div class="empty">${extras.length?'临时课程见下方课时记录':'今天没有安排课程'}</div>`;
+  const fixedCards=fixed.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join('');
+  const extraCards=extras.map((c,i)=>`<article class="course extra-course" data-code="${c.code}" style="--row-start:${10+i};--row-end:${11+i}"><div class="course-head"><h2>${esc(c.name)}</h2><span class="week-tag">临时</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${esc(c.room)}</span><span><b>类型</b>临时加课</span></div></article>`).join('');
+  $('cards').innerHTML=(fixedCards+extraCards)||`<div class="empty">今天没有安排课程</div>`;
   renderLog(list);
 }
 $('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
