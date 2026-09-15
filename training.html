@@ -66,6 +66,8 @@
     .summary-item small { color:var(--muted); font-size:11px; }
     .rate { display:flex; align-items:center; gap:8px; margin-bottom:14px; color:var(--muted); font-size:13px; }
     .rate input { width:100px; min-height:36px; padding:6px 9px; border-color:#d9e0ee; }
+    .history { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:14px; padding:10px 12px; border-radius:12px; background:#f8f8fb; color:var(--muted); font-size:13px; }
+    .history input { width:100px; min-height:36px; padding:6px 9px; border:1px solid #d9e0ee; border-radius:9px; font:inherit; }
     .log-row { display:grid; grid-template-columns:minmax(0,1fr) 102px 78px; gap:9px; align-items:center; padding:12px 0; border-top:1px solid #edf0f5; }
     .log-name { min-width:0; font-weight:700; font-size:14px; }
     .log-name small { display:block; margin-top:4px; color:var(--muted); font-size:12px; font-weight:400; overflow-wrap:anywhere; }
@@ -117,6 +119,7 @@
     <div class="worklog-head"><h2>课时记录</h2><div class="worklog-actions"><button id="exportCsv">导出记录</button><button id="clearLogs">清空记录</button></div></div>
     <div class="summary" id="summary"></div>
     <label class="rate">每小时工资：<input id="hourlyRate" type="number" min="0" step="0.01" inputmode="decimal"> 元</label>
+    <label class="history">9月15日前历史课时：<input id="historyHours" type="number" min="0" step="0.01" inputmode="decimal"> 小时</label>
     <div id="logRows"></div>
   </section>
   <details class="settings">
@@ -154,11 +157,13 @@ function hours(c){const [a,b]=c.time.split('–').map(v=>{const [h,m]=v.split(':
 function logKey(c,date=iso(selected)){return `${date}|${c.code}`;}
 function recordFor(c){const key=logKey(c);return logs[key]||{date:iso(selected),day:c.day,code:c.code,name:c.name,room:c.room,time:c.time,status:'pending',hours:hours(c)};}
 function saveLogs(){localStorage.trainingLogs=JSON.stringify(logs);}
+function historyHours(){return Math.max(0,Number(localStorage.historyHours||0));}
 function totals(){
   const completed=Object.values(logs).filter(v=>v.status==='done');
-  const total=completed.reduce((sum,v)=>sum+Number(v.hours||0),0);
+  const history=historyHours();
+  const total=history+completed.reduce((sum,v)=>sum+Number(v.hours||0),0);
   const now=selected.getFullYear()+'-'+String(selected.getMonth()+1).padStart(2,'0');
-  const month=completed.filter(v=>v.date.startsWith(now)).reduce((sum,v)=>sum+Number(v.hours||0),0);
+  const month=(now==='2026-09'?history:0)+completed.filter(v=>v.date.startsWith(now)).reduce((sum,v)=>sum+Number(v.hours||0),0);
   const weekStart=new Date(selected); weekStart.setDate(selected.getDate()-((selected.getDay()+6)%7));
   const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
   const week=completed.filter(v=>{const d=parse(v.date);return d>=weekStart&&d<=weekEnd}).reduce((sum,v)=>sum+Number(v.hours||0),0);
@@ -169,6 +174,7 @@ function renderLog(list){
   const t=totals();
   $('summary').innerHTML=`<div class="summary-item"><strong>${t.week.toFixed(2)} h</strong><small>本周课时</small></div><div class="summary-item"><strong>${t.month.toFixed(2)} h</strong><small>本月课时</small></div><div class="summary-item"><strong>¥${t.pay.toFixed(2)}</strong><small>累计工资</small></div>`;
   $('hourlyRate').value=localStorage.trainingRate||'';
+  $('historyHours').value=localStorage.historyHours||'';
   $('logRows').innerHTML=list.length?list.map(c=>{const v=recordFor(c);return `<div class="log-row"><div class="log-name">${c.name}<small>${c.room} · 计划 ${c.time} · ${hours(c).toFixed(2)} 小时</small></div><select data-log="${c.code}" class="log-status"><option value="pending" ${v.status==='pending'?'selected':''}>未记录</option><option value="done" ${v.status==='done'?'selected':''}>已完成</option><option value="leave" ${v.status==='leave'?'selected':''}>请假</option><option value="cancel" ${v.status==='cancel'?'selected':''}>取消</option></select><input data-hours="${c.code}" class="log-hours" type="number" min="0" step="0.01" value="${v.hours??hours(c)}" aria-label="实际课时"></div>`}).join(''):`<div class="log-empty">当天没有可记录的课程</div>`;
   document.querySelectorAll('.log-status').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.log);const v=recordFor(c);v.status=el.value;logs[logKey(c)]=v;saveLogs();renderLog(list);});
   document.querySelectorAll('.log-hours').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.hours);const v=recordFor(c);v.hours=Math.max(0,Number(el.value)||0);logs[logKey(c)]=v;saveLogs();renderLog(list);});
@@ -185,8 +191,9 @@ function render(){
 $('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
 $('prev').onclick=()=>{selected.setDate(selected.getDate()-1);render()}; $('next').onclick=()=>{selected.setDate(selected.getDate()+1);render()}; $('today').onclick=()=>{selected=new Date();selected.setHours(12,0,0,0);render()};
 $('hourlyRate').onchange=e=>{localStorage.trainingRate=Math.max(0,Number(e.target.value)||0);render()};
+$('historyHours').onchange=e=>{localStorage.historyHours=Math.max(0,Number(e.target.value)||0);render()};
 $('clearLogs').onclick=()=>{if(confirm('确定清空全部课时记录吗？')){logs={};saveLogs();render()}};
-$('exportCsv').onclick=()=>{const rows=[['日期','星期','课程','地点','计划时间','状态','实际课时','工资']];Object.values(logs).sort((a,b)=>a.date.localeCompare(b.date)).forEach(v=>rows.push([v.date,weekNames[v.day],v.name,v.room,v.time,v.status,Number(v.hours||0),(v.status==='done'?Number(v.hours||0)*Number(localStorage.trainingRate||0):0).toFixed(2)]));const csv='\uFEFF'+rows.map(row=>row.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='体培课时记录.csv';a.click();URL.revokeObjectURL(a.href);};
+$('exportCsv').onclick=()=>{const rows=[['日期','星期','课程','地点','计划时间','状态','实际课时','工资']];if(historyHours()>0)rows.push(['2026-09-14','星期一','9月15日前历史课时','手动补录','—','已完成',historyHours(),(historyHours()*Number(localStorage.trainingRate||0)).toFixed(2)]);Object.values(logs).sort((a,b)=>a.date.localeCompare(b.date)).forEach(v=>rows.push([v.date,weekNames[v.day],v.name,v.room,v.time,v.status,Number(v.hours||0),(v.status==='done'?Number(v.hours||0)*Number(localStorage.trainingRate||0):0).toFixed(2)]));const csv='\uFEFF'+rows.map(row=>row.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='体培课时记录.csv';a.click();URL.revokeObjectURL(a.href);};
 render();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
