@@ -1,4 +1,4 @@
-const CACHE_NAME = 'daily-schedule-v10';
+const CACHE_NAME = 'daily-schedule-v11';
 const APP_FILES = [
   './',
   './index.html',

@@ -69,6 +69,18 @@
     .rate input { width:100px; min-height:36px; padding:6px 9px; border-color:#d9e0ee; }
     .history { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:14px; padding:10px 12px; border-radius:12px; background:#f8f8fb; color:var(--muted); font-size:13px; }
     .history input { width:100px; min-height:36px; padding:6px 9px; border:1px solid #d9e0ee; border-radius:9px; font:inherit; }
+    .extra-form { margin-bottom:14px; padding:12px; border:1px solid #e2e6ef; border-radius:14px; background:#fafbfc; }
+    .extra-form summary { cursor:pointer; color:var(--ink); font-size:14px; font-weight:700; }
+    .extra-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:12px; }
+    .extra-grid label { color:var(--muted); font-size:12px; }
+    .extra-grid input { width:100%; min-height:38px; margin-top:5px; padding:7px 9px; border:1px solid #d9e0ee; border-radius:9px; font:inherit; color:var(--ink); background:#fff; }
+    .extra-grid .wide { grid-column:1 / -1; }
+    .add-extra { grid-column:1 / -1; min-height:40px; border-color:#8e99bd; color:#fff; background:var(--blue); }
+    .extra-list { margin-bottom:14px; }
+    .extra-item { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:11px 12px; margin-top:8px; border-left:4px solid #8a79a9; border-radius:10px; background:#f4f1f7; }
+    .extra-item strong { display:block; font-size:14px; }
+    .extra-item small { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
+    .delete-extra { flex:0 0 auto; min-height:32px; padding:5px 8px; border-color:#dacfd5; color:#925e70; background:#fff; font-size:12px; }
     .log-row { display:grid; grid-template-columns:minmax(0,1fr) 102px 78px; gap:9px; align-items:center; padding:12px 0; border-top:1px solid #edf0f5; }
     .log-name { min-width:0; font-weight:700; font-size:14px; }
     .log-name small { display:block; margin-top:4px; color:var(--muted); font-size:12px; font-weight:400; overflow-wrap:anywhere; }
@@ -95,6 +107,7 @@
       .worklog{padding:14px 12px;border-radius:18px}.worklog-head{align-items:flex-start;display:block}.worklog-actions{margin-top:10px}
       .summary{gap:5px}.summary-item{padding:9px 4px}.summary-item strong{font-size:16px}
       .rate{flex-wrap:wrap}.log-row{grid-template-columns:minmax(0,1fr) 82px 66px;gap:6px}.log-name{font-size:13px}.log-name small{font-size:11px}
+      .extra-grid{grid-template-columns:1fr}.extra-grid .wide,.add-extra{grid-column:1}
     }
   </style>
 </head>
@@ -122,6 +135,18 @@
     <div class="summary" id="summary"></div>
     <label class="rate">每小时工资：<input id="hourlyRate" type="number" min="0" step="0.01" inputmode="decimal"> 元</label>
     <label class="history">9月15日前历史课时：<input id="historyHours" type="number" min="0" step="0.01" inputmode="decimal"> 小时</label>
+    <details class="extra-form">
+      <summary>添加临时课程</summary>
+      <form class="extra-grid" id="extraForm">
+        <label>日期<input id="extraDate" type="date" required></label>
+        <label>课程名称<input id="extraName" type="text" value="临时加课" required></label>
+        <label class="wide">地点<input id="extraRoom" type="text" required></label>
+        <label>开始时间<input id="extraStart" type="time" required></label>
+        <label>结束时间<input id="extraEnd" type="time" required></label>
+        <button class="add-extra" type="submit">保存临时课程</button>
+      </form>
+    </details>
+    <div class="extra-list" id="extraList"></div>
     <div id="logRows"></div>
   </section>
   <details class="settings">
@@ -151,15 +176,18 @@ const defaultStart='2026-09-07';
 const $=id=>document.getElementById(id);
 let selected = new Date(); selected.setHours(12,0,0,0);
 let logs = JSON.parse(localStorage.trainingLogs || '{}');
+let extraCourses = JSON.parse(localStorage.extraTrainingCourses || '[]');
 function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)}
 function parse(s){const [y,m,day]=s.split('-').map(Number);return new Date(y,m-1,day,12)}
 function weekInfo(d){const start=parse(defaultStart); const diff=Math.floor((d-start)/86400000); return {week:Math.floor(diff/7)+1, valid:diff>=0};}
 function active(c,d){return d>=parse(c.date);}
 function hours(c){const [a,b]=c.time.split('–').map(v=>{const [h,m]=v.split(':').map(Number);return h+m/60});return +(b-a).toFixed(2);}
 function logKey(c,date=iso(selected)){return `${date}|${c.code}`;}
-function recordFor(c){const key=logKey(c);return logs[key]||{date:iso(selected),day:c.day,code:c.code,name:c.name,room:c.room,time:c.time,status:'pending',hours:hours(c)};}
+function recordFor(c){const key=logKey(c);return logs[key]||{date:iso(selected),day:c.day,code:c.code,name:c.name,room:c.room,time:c.time,source:c.extra?'临时加课':'固定课程',status:'pending',hours:hours(c)};}
 function saveLogs(){localStorage.trainingLogs=JSON.stringify(logs);}
+function saveExtraCourses(){localStorage.extraTrainingCourses=JSON.stringify(extraCourses);}
 function historyHours(){return Math.max(0,Number(localStorage.historyHours||0));}
+function esc(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 function totals(){
   const completed=Object.values(logs).filter(v=>v.status==='done');
   const history=historyHours();
@@ -177,25 +205,33 @@ function renderLog(list){
   $('summary').innerHTML=`<div class="summary-item"><strong>${t.week.toFixed(2)} h</strong><small>本周课时</small></div><div class="summary-item"><strong>${t.month.toFixed(2)} h</strong><small>本月课时</small></div><div class="summary-item"><strong>¥${t.pay.toFixed(2)}</strong><small>累计工资</small></div>`;
   $('hourlyRate').value=localStorage.trainingRate||'';
   $('historyHours').value=localStorage.historyHours||'';
-  $('logRows').innerHTML=list.length?list.map(c=>{const v=recordFor(c);return `<div class="log-row"><div class="log-name">${c.name}<small>${c.room} · 计划 ${c.time} · ${hours(c).toFixed(2)} 小时</small></div><select data-log="${c.code}" class="log-status"><option value="pending" ${v.status==='pending'?'selected':''}>未记录</option><option value="done" ${v.status==='done'?'selected':''}>已完成</option><option value="leave" ${v.status==='leave'?'selected':''}>请假</option><option value="cancel" ${v.status==='cancel'?'selected':''}>取消</option></select><input data-hours="${c.code}" class="log-hours" type="number" min="0" step="0.01" value="${v.hours??hours(c)}" aria-label="实际课时"></div>`}).join(''):`<div class="log-empty">当天没有可记录的课程</div>`;
+  const todayExtras=extraCourses.filter(c=>c.date===iso(selected));
+  $('extraList').innerHTML=todayExtras.map(c=>`<div class="extra-item"><div><strong>${esc(c.name)}</strong><small>${esc(c.time)} · ${esc(c.room)}</small></div><button class="delete-extra" data-delete="${c.code}">删除</button></div>`).join('');
+  $('logRows').innerHTML=list.length?list.map(c=>{const v=recordFor(c);return `<div class="log-row"><div class="log-name">${esc(c.name)}<small>${esc(c.room)} · 计划 ${esc(c.time)} · ${hours(c).toFixed(2)} 小时${c.extra?' · 临时加课':''}</small></div><select data-log="${c.code}" class="log-status"><option value="pending" ${v.status==='pending'?'selected':''}>未记录</option><option value="done" ${v.status==='done'?'selected':''}>已完成</option><option value="leave" ${v.status==='leave'?'selected':''}>请假</option><option value="cancel" ${v.status==='cancel'?'selected':''}>取消</option></select><input data-hours="${c.code}" class="log-hours" type="number" min="0" step="0.01" value="${v.hours??hours(c)}" aria-label="实际课时"></div>`}).join(''):`<div class="log-empty">当天没有可记录的课程</div>`;
   document.querySelectorAll('.log-status').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.log);const v=recordFor(c);v.status=el.value;logs[logKey(c)]=v;saveLogs();renderLog(list);});
   document.querySelectorAll('.log-hours').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.hours);const v=recordFor(c);v.hours=Math.max(0,Number(el.value)||0);logs[logKey(c)]=v;saveLogs();renderLog(list);});
+  document.querySelectorAll('.delete-extra').forEach(el=>el.onclick=()=>{const c=extraCourses.find(x=>x.code===el.dataset.delete);if(!c||!confirm('确定删除这节临时课程吗？'))return;extraCourses=extraCourses.filter(x=>x.code!==c.code);delete logs[logKey(c,c.date)];saveExtraCourses();saveLogs();render();});
 }
 function render(){
+  $('extraDate').value=iso(selected);
   $('date').value=iso(selected); const info=weekInfo(selected); const day=selected.getDay();
-  const list=courses.filter(c=>c.day===day && active(c,selected)).sort((a,b)=>a.start-b.start);
+  const fixed=courses.filter(c=>c.day===day && active(c,selected));
+  const extras=extraCourses.filter(c=>c.date===iso(selected));
+  const list=[...fixed,...extras].sort((a,b)=>a.time.localeCompare(b.time));
   $('title').textContent=`${weekNames[day]} · ${selected.getMonth()+1}月${selected.getDate()}日`;
   $('meta').textContent=info.valid?`第 ${info.week} 周 · ${list.length ? `${list.length} 个课程安排` : '今天没有课程'}`:'课程开始日期之前';
   $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
-  $('cards').innerHTML=list.length?list.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join(''):`<div class="empty">今天没有安排课程</div>`;
+  $('cards').innerHTML=fixed.length?fixed.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join(''):`<div class="empty">${extras.length?'临时课程见下方课时记录':'今天没有安排课程'}</div>`;
   renderLog(list);
 }
 $('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
 $('prev').onclick=()=>{selected.setDate(selected.getDate()-1);render()}; $('next').onclick=()=>{selected.setDate(selected.getDate()+1);render()}; $('today').onclick=()=>{selected=new Date();selected.setHours(12,0,0,0);render()};
 $('hourlyRate').onchange=e=>{localStorage.trainingRate=Math.max(0,Number(e.target.value)||0);render()};
 $('historyHours').onchange=e=>{localStorage.historyHours=Math.max(0,Number(e.target.value)||0);render()};
+$('extraDate').value=iso(selected);
+$('extraForm').onsubmit=e=>{e.preventDefault();const date=$('extraDate').value,start=$('extraStart').value,end=$('extraEnd').value;if(!date||!start||!end)return;if(end<=start){alert('结束时间必须晚于开始时间');return;}const d=parse(date);extraCourses.push({day:d.getDay(),name:$('extraName').value.trim(),room:$('extraRoom').value.trim(),time:`${start}–${end}`,date,code:`extra-${Date.now()}`,extra:true});saveExtraCourses();selected=d;$('extraForm').reset();$('extraName').value='临时加课';$('extraDate').value=date;render();};
 $('clearLogs').onclick=()=>{if(confirm('确定清空全部课时记录吗？')){logs={};saveLogs();render()}};
-$('exportCsv').onclick=()=>{const rows=[['日期','星期','课程','地点','计划时间','状态','实际课时','工资']];if(historyHours()>0)rows.push(['2026-09-14','星期一','9月15日前历史课时','手动补录','—','已完成',historyHours(),(historyHours()*Number(localStorage.trainingRate||0)).toFixed(2)]);Object.values(logs).sort((a,b)=>a.date.localeCompare(b.date)).forEach(v=>rows.push([v.date,weekNames[v.day],v.name,v.room,v.time,v.status,Number(v.hours||0),(v.status==='done'?Number(v.hours||0)*Number(localStorage.trainingRate||0):0).toFixed(2)]));const csv='\uFEFF'+rows.map(row=>row.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='体培课时记录.csv';a.click();URL.revokeObjectURL(a.href);};
+$('exportCsv').onclick=()=>{const rows=[['日期','星期','课程','地点','计划时间','来源','状态','实际课时','工资']];if(historyHours()>0)rows.push(['2026-09-14','星期一','9月15日前历史课时','手动补录','—','历史补录','已完成',historyHours(),(historyHours()*Number(localStorage.trainingRate||0)).toFixed(2)]);Object.values(logs).sort((a,b)=>a.date.localeCompare(b.date)).forEach(v=>rows.push([v.date,weekNames[v.day],v.name,v.room,v.time,v.source||'固定课程',v.status,Number(v.hours||0),(v.status==='done'?Number(v.hours||0)*Number(localStorage.trainingRate||0):0).toFixed(2)]));const csv='\uFEFF'+rows.map(row=>row.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='体培课时记录.csv';a.click();URL.revokeObjectURL(a.href);};
 render();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
