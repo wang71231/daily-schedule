@@ -42,11 +42,11 @@
     .course[data-code="5782"] { --accent:#63977e; --tint:#eef6f1; }
     .course[data-code="5791"] { --accent:#b87891; --tint:#f8eff3; }
     .course-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-    .course h2 { margin:0; color:var(--ink); font-size:20px; line-height:1.35; font-weight:750; }
+    .course h2 { margin:0; min-width:0; color:var(--ink); font-size:20px; line-height:1.35; font-weight:750; overflow-wrap:anywhere; }
     .week-tag { flex:0 0 auto; padding:4px 9px; border-radius:999px; color:var(--accent); background:white; box-shadow:0 2px 8px rgba(35,48,99,.07); font-size:12px; font-weight:700; }
     .course-time { margin-top:12px; color:var(--accent); font-size:15px; font-weight:700; }
     .course-time span { margin-left:12px; color:#34405d; font-weight:600; }
-    .course-details { display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:10px; color:#4f5c77; font-size:14px; }
+    .course-details { display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:10px; color:#4f5c77; font-size:14px; overflow-wrap:anywhere; }
     .course-details b { color:#7b859d; font-weight:500; margin-right:6px; }
     .course .note { margin:10px 0 0; color:#8a94aa; font-size:12px; }
     .empty { grid-column:1; grid-row:1 / 4; align-self:start; margin-top:6px; padding:62px 20px; text-align:center; color:var(--muted); background:linear-gradient(135deg,#f7f8ff,#fff); border:1px dashed #cfd7eb; border-radius:19px; }
@@ -64,13 +64,14 @@
       .tools button{padding:8px 6px;font-size:13px}
       #date{grid-column:1/-1;grid-row:1;width:100%}
       #prev{grid-column:1;grid-row:2} #next{grid-column:2;grid-row:2} #today{grid-column:3;grid-row:2}
-      .layout{--slot-height:112px;grid-template-columns:93px 1fr;gap:7px;padding:12px 8px;border-radius:22px}
+      .layout{--slot-height:124px;grid-template-columns:112px minmax(0,1fr);gap:7px;padding:12px 8px;border-radius:22px}
       .slot{padding-right:20px}.slot:after{right:1px}.timeline:after{right:7px}
       .slot strong{font-size:13px}.slot small{font-size:10px;margin-top:17px}
-      .course{padding:14px 12px 12px 17px;border-radius:16px}
-      .course h2{font-size:17px}.week-tag{padding:3px 7px;font-size:10px}
+      .course{padding:14px 10px 12px 17px;border-radius:16px}
+      .course h2{font-size:16px}.week-tag{padding:3px 7px;font-size:10px}
       .course-time{margin-top:9px;font-size:13px}.course-time span{display:block;margin:3px 0 0}
-      .course-details{gap:5px 12px;margin-top:7px;font-size:12px}
+      .course-details{display:block;margin-top:7px;font-size:12px}
+      .course-details span{display:block;margin-top:3px}
       .course .note{margin-top:7px;font-size:10px}
     }
   </style>
