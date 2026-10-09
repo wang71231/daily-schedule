@@ -58,6 +58,13 @@
     .settings input { border-color:#d9e0ee; }
     .worklog { margin-top:16px; padding:18px; border:1px solid rgba(220,226,243,.9); border-radius:22px; background:rgba(255,255,255,.94); box-shadow:0 10px 28px rgba(38,52,101,.06); }
     .worklog-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .worklog-head p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .quick-links { display:flex; gap:8px; margin:0 0 14px; }
+    .quick-links a { padding:8px 12px; border:1px solid #dce1ec; border-radius:11px; background:#fff; color:var(--blue-deep); text-decoration:none; font-size:13px; font-weight:700; }
+    .data-tools { margin:14px 0; padding:12px; border:1px solid #e2e6ef; border-radius:14px; background:#fafbfc; }
+    .data-tools summary { cursor:pointer; font-size:14px; font-weight:700; }
+    .data-tools .worklog-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    :focus-visible { outline:3px solid #7d8bc4; outline-offset:2px; }
     .worklog h2 { margin:0; font-size:19px; }
     .worklog-actions { display:flex; gap:8px; flex-wrap:wrap; }
     .worklog-actions button { min-height:36px; padding:7px 10px; border-color:#d9dfed; font-size:13px; }
@@ -108,6 +115,13 @@
       .summary{gap:5px}.summary-item{padding:9px 4px}.summary-item strong{font-size:16px}
       .rate{flex-wrap:wrap}.log-row{grid-template-columns:minmax(0,1fr) 82px 66px;gap:6px}.log-name{font-size:13px}.log-name small{font-size:11px}
       .extra-grid{grid-template-columns:1fr}.extra-grid .wide,.add-extra{grid-column:1}
+      .quick-links a{flex:1;text-align:center}
+      .worklog-head{margin-bottom:14px}
+      .summary-item small{font-size:12px}
+      .layout:has(.empty){--slot-height:74px}
+      .layout:has(.empty) .timeline .slot:nth-child(n+4){display:none}
+      .layout:has(.empty) .cards{min-height:222px;grid-template-rows:repeat(3,74px)}
+      .layout:has(.empty) .empty{padding:55px 12px}
     }
   </style>
 </head>
@@ -126,15 +140,17 @@
       <button id="today">回到今天</button>
     </div>
   </header>
-  <section class="layout">
+  <nav class="quick-links" aria-label="页面快捷入口"><a href="#schedule">查看日程</a><a href="#worklog">记录课时</a></nav>
+  <section class="layout" id="schedule" aria-label="当日课程">
     <aside class="timeline" id="timeline"></aside>
     <section class="cards" id="cards"></section>
   </section>
-  <section class="worklog">
-    <div class="worklog-head"><h2>课时记录</h2><div class="worklog-actions"><button id="exportCsv">导出 CSV</button><button id="exportBackup">备份数据</button><button id="importBackup">恢复备份</button><input id="backupFile" type="file" accept=".json,application/json" hidden><button id="clearLogs">清空记录</button></div></div>
+  <section class="worklog" id="worklog">
+    <div class="worklog-head"><div><h2>课时记录</h2><p>先记录当天课程，再查看累计课时</p></div></div>
     <div id="storageNotice" role="status" style="margin:0 0 12px;color:#925e70;font-size:13px"></div>
-    <details class="extra-form"><summary>查看全部课时记录</summary><div id="allLogs"></div></details>
     <div class="summary" id="summary"></div>
+    <div id="logRows"></div>
+    <details class="extra-form"><summary>查看全部课时记录</summary><div id="allLogs"></div></details>
     <label class="rate">每小时工资：<input id="hourlyRate" type="number" min="0" step="0.01" inputmode="decimal"> 元</label>
     <label class="history">9月15日前历史课时：<input id="historyHours" type="number" min="0" step="0.01" inputmode="decimal"> 小时</label>
     <details class="extra-form">
@@ -149,7 +165,7 @@
       </form>
     </details>
     <div class="extra-list" id="extraList"></div>
-    <div id="logRows"></div>
+    <details class="data-tools"><summary>导出、备份与管理数据</summary><div class="worklog-actions"><button id="exportCsv">导出 CSV</button><button id="exportBackup">备份数据</button><button id="importBackup">恢复备份</button><input id="backupFile" type="file" accept=".json,application/json" hidden><button id="clearLogs">清空记录</button></div></details>
   </section>
   <details class="settings">
     <summary>课表说明</summary>
