@@ -95,6 +95,10 @@ git push origin main
 
 当前最新功能提交：`36e6405` 之后继续加入了返回首页、历史课时、临时加课显示和记录功能。
 
+## 8.1 服务器版准备状态
+
+`server/app.py` 提供带登录的同源网页和 SQLite 课时接口；`server/server-mode.js` 负责页面同步、断网待同步提示和版本冲突处理。详细启动、迁移与 HTTPS 要求见 `server/README.md`。原 GitHub Pages 页面仍使用浏览器本地存储；服务器版需要单独运行，并通过手机导出的 JSON 文件迁移旧记录。当前只完成本地开发和验证，尚未部署到 `wrh-server`，不要将本地测试数据库当作手机数据。
+
 ## 9. 重要注意事项
 
 - 不要把 `university.html` 和 `training.html` 合并，否则会覆盖其中一套课表。

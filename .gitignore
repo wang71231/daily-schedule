@@ -1,0 +1,5 @@
+server/*.db
+server/*.db-*
+server/backups/
+server/.env
+server/__pycache__/
