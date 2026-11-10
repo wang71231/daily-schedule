@@ -5,6 +5,22 @@ from pathlib import Path
 import app
 
 
+class LoginLimitTest(unittest.TestCase):
+    def setUp(self):
+        app.LOGIN_ATTEMPTS.clear()
+
+    def test_limit_and_expiry(self):
+        for _ in range(5):
+            self.assertEqual(app.login_wait('proxy', 100), 0)
+        self.assertEqual(app.login_wait('proxy', 101), 299)
+        self.assertEqual(app.login_wait('proxy', 400), 0)
+
+    def test_success_resets_attempts(self):
+        app.login_wait('proxy', 100)
+        app.login_succeeded('proxy')
+        self.assertNotIn('proxy', app.LOGIN_ATTEMPTS)
+
+
 class ScheduleStorageTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

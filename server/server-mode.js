@@ -1,172 +1,127 @@
 (() => {
-  const root = document.querySelector('main');
-  const worklog = document.querySelector('.worklog');
-  const panel = document.createElement('div');
-  panel.style.cssText = 'margin:0 0 14px;padding:12px 14px;border:1px solid #d9dfed;border-radius:12px;background:#f5f7fc;color:#35415c;font-size:13px;line-height:1.6';
-  worklog.prepend(panel);
-  const logout = document.createElement('button');
-  logout.textContent = '退出登录';
-  logout.style.cssText = 'min-height:32px;margin:0 0 10px;padding:5px 9px;border:1px solid #b6bfd7;font-size:12px';
-  logout.onclick = async () => {
-    if (localStorage.getItem('scheduleDirty') === '1' && !confirm('还有未同步的更改，确认退出登录？')) return;
-    await fetch('/api/logout', {method:'POST',credentials:'same-origin',headers:{'X-CSRF-Token':csrf}});
-    location.href = '/login';
+  const D=ScheduleData,S=ScheduleStore;
+  const panel=document.createElement('div');
+  panel.id='syncStatus';panel.setAttribute('role','status');
+  panel.style.cssText='margin:0 0 14px;padding:12px;border:1px solid #d9dfed;border-radius:12px;background:#f5f7fc;font-size:13px;line-height:1.6';
+  document.querySelector('.worklog').prepend(panel);
+  let csrf='',running=false,paused=false,timer;
+  const show=(message,actions=[])=>{
+    panel.replaceChildren(document.createTextNode(message));
+    for(const [title,handler] of actions){
+      const button=document.createElement('button');button.textContent=title;
+      button.style.cssText='margin:5px 0 0 8px;min-height:32px;padding:5px 9px;font-size:12px';
+      button.onclick=handler;panel.append(button);
+    }
   };
-  worklog.prepend(logout);
-  let revision = Number(localStorage.getItem('scheduleServerRevision') || 0);
-  let csrf = '';
-  let timer = null;
-  let sending = false;
-  let generation = 0;
-  let conflict = false;
-
-  function localState() {
-    return {
-      logs: readJson('trainingLogs', {}),
-      extraCourses: readJson('extraTrainingCourses', []),
-      historyHours: localStorage.getItem('historyHours') || '0',
-      trainingRate: localStorage.getItem('trainingRate') || '0'
-    };
+  async function api(url,options={}) {
+    const response=await fetch(url,{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000),...options});
+    if(response.status===401)throw Error('登录已过期，本机记录仍保留，请重新登录');
+    return response;
   }
-
-  function applyState(state, serverRevision) {
-    for (const [field, key] of Object.entries({logs:'trainingLogs', extraCourses:'extraTrainingCourses', historyHours:'historyHours', trainingRate:'trainingRate'})) {
-      localStorage.setItem(key, typeof state[field] === 'string' ? state[field] : JSON.stringify(state[field]));
-    }
-    revision = serverRevision;
-    localStorage.setItem('scheduleServerRevision', String(revision));
-    localStorage.removeItem('scheduleDirty');
-    logs = readJson('trainingLogs', {});
-    extraCourses = readJson('extraTrainingCourses', []);
-    render();
+  const hasData=s=>Object.keys(s.logs).length||s.extraCourses.length||Number(s.historyHours)>0;
+  function pause(remote,message) {
+    paused=true;
+    show(message,[
+      ['备份本机',()=>exportState(S.current().state)],
+      ['备份云端',()=>exportState(remote.state,'云端课时备份')],
+      ['合并，冲突保留本机',()=>{if(confirm('合并所有不冲突的记录；冲突的记录采用本机版本（含删除）。继续？'))sync('local');}],
+      ['合并，冲突保留云端',()=>{if(confirm('合并所有不冲突的记录；冲突的记录采用云端版本（含删除）。继续？'))sync('remote');}]
+    ]);
   }
-
-  function show(message, actions = []) {
-    panel.replaceChildren();
-    const label = document.createElement('span');
-    label.textContent = message;
-    panel.append(label);
-    for (const [title, handler] of actions) {
-      const button = document.createElement('button');
-      button.textContent = title;
-      button.style.cssText = 'min-height:32px;margin:5px 0 0 8px;padding:5px 9px;border:1px solid #b6bfd7;font-size:12px';
-      button.onclick = handler;
-      panel.append(button);
-    }
-  }
-
-  async function fetchState() {
-    const response = await fetch('/api/state', {credentials:'same-origin', cache:'no-store'});
-    if (response.status === 401) { location.href = '/login'; throw Error('login_required'); }
-    if (!response.ok) throw Error(`HTTP ${response.status}`);
-    return response.json();
-  }
-
-  async function resolveConflict() {
-    conflict = true;
+  async function run(choice) {
+    if(running||paused&&!choice)return;
+    running=true;paused=false;
     try {
-      const remote = await fetchState();
-      csrf = remote.csrf;
-      show('服务器和本机都有尚未合并的更改，已暂停自动上传。先备份本机数据，再选择合并。', [
-        ['备份本机数据', () => document.getElementById('exportBackup').click()],
-        ['合并后上传', () => {
-          if (!confirm('按日期和课程合并；同一条记录以本机为准。确认已备份后继续？')) return;
-          const local = localState();
-          const merged = {
-            logs: {...remote.state.logs, ...local.logs},
-            extraCourses: [...new Map([...remote.state.extraCourses, ...local.extraCourses].map(item => [item.code, item])).values()],
-            historyHours: local.historyHours,
-            trainingRate: local.trainingRate
-          };
-          applyState(merged, remote.revision);
-          localStorage.setItem('scheduleDirty', '1');
-          conflict = false;
-          queue();
-        }]
-      ]);
-    } catch {
-      show('无法检查服务器版本，本机更改已保留。恢复连接后再试。');
-    }
-  }
-
-  async function flush() {
-    if (sending || conflict || localStorage.getItem('scheduleDirty') !== '1' || !csrf) return;
-    sending = true;
-    const sentGeneration = generation;
-    show('正在同步到服务器…');
-    try {
-      const response = await fetch('/api/state', {
-        method:'POST', credentials:'same-origin',
-        headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
-        body:JSON.stringify({revision,state:localState()})
+      await S.ready;
+      let response=await api('/api/state');
+      if(!response.ok)throw Error(`读取失败（${response.status}）`);
+      const remote=await response.json();D.validate(remote.state);
+      if(!Number.isSafeInteger(remote.revision)||remote.revision<0||typeof remote.csrf!=='string')throw Error('云端返回格式不正确');
+      csrf=remote.csrf;
+      let doc=await S.refresh();
+      const identity=remote.serverId||'legacy-server';
+      const changedServer=doc.serverId && doc.serverId!==identity;
+      const rollback=doc.serverRevision!==null && remote.revision<doc.serverRevision;
+      const inconsistent=doc.base && remote.revision===doc.serverRevision && !D.equal(doc.base,remote.state);
+      if((changedServer||rollback||inconsistent)&&!choice){
+        pause(remote,'云端来源或版本发生变化，已暂停覆盖。请先备份两端，再选择合并。');return;
+      }
+      if(!doc.base&&hasData(doc.state)&&!hasData(remote.state)&&!choice){
+        paused=true;
+        show('云端尚无记录，本机有数据。先备份，再上传本机记录。',[
+          ['备份本机',()=>exportState(S.current().state)],
+          ['上传本机记录',()=>{if(confirm('将本机记录上传到当前空云端？'))sync('local');}]
+        ]);return;
+      }
+      const base=changedServer||rollback||inconsistent?null:doc.base;
+      const merged=!doc.base&&D.equal(doc.state,D.empty())
+        ? {state:remote.state,conflicts:[]}
+        : D.merge(base,doc.state,remote.state,choice);
+      if(merged.conflicts.length&&!choice){
+        pause(remote,`有 ${merged.conflicts.length} 项两端改动冲突，已暂停自动覆盖。${merged.conflicts.slice(0,3).join('；')}`);return;
+      }
+      doc=await S.setRemote(remote,doc.version,merged.state);
+      if(!doc.dirty){show(`已同步到云端 · 版本 ${remote.revision}`);return;}
+      show('本机已保存，正在上传云端…');
+      const sent=doc;
+      response=await api('/api/state',{
+        method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+        body:JSON.stringify({revision:sent.serverRevision,serverId:identity,state:sent.state})
       });
-      if (response.status === 409) { sending = false; await resolveConflict(); return; }
-      if (response.status === 401) { location.href='/login'; return; }
-      if (!response.ok) throw Error(`HTTP ${response.status}`);
-      revision = (await response.json()).revision;
-      localStorage.setItem('scheduleServerRevision', String(revision));
-      if (generation === sentGeneration) {
-        localStorage.removeItem('scheduleDirty');
-        show(`已同步到服务器 · 版本 ${revision}`);
-      } else if (localHasData && JSON.stringify(existing) !== JSON.stringify(remote.state)) {
-        resolveConflict();
-      } else {
-        show('有新更改，继续同步…');
-      }
-    } catch {
-      show('网络中断：修改已保存在本机，尚未同步到服务器。', [['立即重试', flush]]);
-    } finally {
-      sending = false;
-      if (!conflict && localStorage.getItem('scheduleDirty') === '1') {
-        clearTimeout(timer);
-        timer = setTimeout(flush, 10000);
-      }
-    }
+      if(response.status===409){show('其他设备刚更新了记录，正在重新合并…');queue(1000);return;}
+      if(!response.ok)throw Error(`上传失败（${response.status}）`);
+      const result=await response.json();
+      if(result.revision!==sent.serverRevision+1)throw Error('云端确认版本不正确，本机更改保留');
+      const latest=await S.acknowledge(sent,result);
+      show(latest.dirty?'本机还有新更改，继续同步…':`已同步到云端 · 版本 ${result.revision}`);
+      if(latest.dirty)queue();
+    }catch(error){
+      show(`${error.message}。未同步的修改保留在本机。`,[['重试',()=>sync()],['重新登录',()=>{location.href='/login';}]]);
+    }finally{running=false;}
   }
-
-  function queue() {
-    generation++;
-    localStorage.setItem('scheduleDirty', '1');
-    show('本机已保存，等待同步到服务器…');
-    clearTimeout(timer);
-    timer = setTimeout(flush, 500);
+  async function sync(choice) {
+    if(choice)paused=false;
+    if(navigator.locks){
+      await navigator.locks.request('daily-schedule-sync',{ifAvailable:true},async lock=>{if(lock)await run(choice);});
+    }else await run(choice);
   }
-
-  window.scheduleBackend = {queue};
-  fetchState().then(remote => {
-    csrf = remote.csrf;
-    const pending = localStorage.getItem('scheduleDirty') === '1';
-    if (pending) {
-      if (revision === remote.revision) {
-        show('找到本机待同步的更改，正在上传…');
-        queue();
-      } else {
-        resolveConflict();
+  function queue(delay=500){clearTimeout(timer);timer=setTimeout(()=>sync(),delay);}
+  window.scheduleBackend={queue};
+  window.addEventListener('online',()=>queue());
+  window.addEventListener('focus',()=>queue());
+  setInterval(()=>{if(!paused)sync();},30000);
+  const logout=document.createElement('button');logout.textContent='退出登录';
+  logout.onclick=async()=>{
+    if(S.current()?.dirty&&!confirm('有尚未上传的本机记录，确认退出登录？记录仍保留在此浏览器。'))return;
+    try{await api('/api/logout',{method:'POST',headers:{'X-CSRF-Token':csrf}});location.href='/login';}catch(error){show(error.message);}
+  };
+  panel.before(logout);
+  const historyButton=document.createElement('button');historyButton.textContent='云端保存历史';historyButton.style.marginLeft='8px';
+  historyButton.onclick=async()=>{
+    try{
+      const response=await api('/api/history');
+      if(!response.ok)throw Error('此入口暂不支持云端历史，请使用本机保存历史');
+      const {history}=await response.json();
+      const list=document.getElementById('historyList');list.replaceChildren();
+      if(!history.length)list.textContent='云端尚无历史版本。每次上传前都会保留旧版本。';
+      for(const item of history){
+        const row=document.createElement('p');row.textContent=`云端版本 ${item.revision} · ${new Date(item.updated_at).toLocaleString()} `;
+        const download=document.createElement('button');download.textContent='下载备份';
+        const get=async()=>{const r=await api('/api/history?revision='+item.revision);if(!r.ok)throw Error('读取历史失败');return D.fromBackup(await r.json());};
+        download.onclick=async()=>{try{exportState(await get(),'云端历史-'+item.revision);}catch(error){alert(error.message);}};
+        const restore=document.createElement('button');restore.textContent='恢复此版本';restore.style.marginLeft='8px';
+        restore.onclick=async()=>{
+          try{
+            const state=await get();
+            if(!confirm(`恢复云端版本 ${item.revision} 的完整数据？当前本机版本会先保存在本机历史中，再按同步规则上传。`))return;
+            if(await editState(s=>Object.assign(s,state),'恢复云端历史前'))document.getElementById('historyDialog').close();
+          }catch(error){alert(error.message);}
+        };
+        row.append(download,restore);list.append(row);
       }
-    } else {
-      const existing = localState();
-      const remoteEmpty = !Object.keys(remote.state.logs).length && !remote.state.extraCourses.length && Number(remote.state.historyHours) === 0;
-      const localHasData = Object.keys(existing.logs).length || existing.extraCourses.length || Number(existing.historyHours) > 0;
-      if (remoteEmpty && localHasData) {
-        revision = remote.revision;
-        localStorage.setItem('scheduleServerRevision', String(revision));
-        show('服务器尚无记录，但本机缓存有数据。请先备份，再决定是否上传。', [
-          ['备份本机数据', () => document.getElementById('exportBackup').click()],
-          ['上传本机记录', () => {
-            if (confirm('确认已备份本机记录，并将它们上传到空服务器？')) queue();
-          }]
-        ]);
-      } else {
-        applyState(remote.state, remote.revision);
-        const count = Object.keys(remote.state.logs).length;
-        show(count ? `已从服务器载入 ${count} 条课时记录 · 版本 ${revision}` : '服务器尚无课时记录。如旧记录在 GitHub Pages，请先在那里“备份数据”，再在此页点“恢复备份”导入 JSON。');
-      }
-    }
-  }).catch(() => {
-    show('服务器暂时不可用。可查看本机缓存；修改会待网络恢复后同步。', [['立即重试', () => location.reload()]]);
-  }).finally(() => { root.style.visibility = 'visible'; });
-
-  setInterval(() => {
-    if (localStorage.getItem('scheduleDirty') === '1' && !conflict) flush();
-  }, 15000);
+      document.getElementById('historyDialog').showModal();
+    }catch(error){alert(error.message);}
+  };
+  panel.before(historyButton);
+  S.ready.then(()=>sync()).catch(error=>show(`本机数据读取失败，已暂停同步：${error.message}`));
 })();

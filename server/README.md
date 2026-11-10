@@ -1,3 +1,5 @@
+> 此目录保留原家庭服务器实现作为兼容参考；本次不维修家里服务器。新部署使用 [Cloudflare Workers + D1](../cloudflare/README.md)，不依赖此 Python 进程。
+
 # 课表服务器版（本地准备）
 
 此目录提供一个只用 Python 标准库的课时数据服务。页面、接口同源；课时记录、临时加课、历史课时和工资单价保存在 SQLite。原 GitHub Pages 课表仍可独立使用，当前阶段不切换线上入口。
@@ -32,3 +34,19 @@
 - HTTPS 登录、导入、离线修改后重连、并发冲突及数据库备份恢复均需在真实服务器上复核，之后再迁移手机数据。
 
 当前尚未部署到服务器。`wrh-server` 在 2026-10-09 的 Tailscale 状态为离线。
+
+## 课表服务器部署（2026-10-09）
+
+- SSH 已恢复连接，实际主机名 rebirth。
+- 工程：/home/renhao/daily-schedule。
+- 服务：daily-schedule.service，开机自动启动；监听 127.0.0.1:8091。
+- 数据库：/var/lib/daily-schedule/schedule.db。
+- 备份：/var/lib/daily-schedule/backups，每天服务器时间 03:00 执行，关机错过后补执行。
+- 登录密码：本机桌面《课表服务器登录密码.txt》，不要上传公开仓库。
+- 计划入口：https://wrh-server.tail79e8b5.ts.net:8443/ 。目前尚未生效：Tailscale Serve 需在账户网页启用。
+- 启用后执行：sudo tailscale serve --bg --https=8443 http://127.0.0.1:8091。
+- 已检查：登录、数据读取、页面和 CSS 返回正常，备份数据库 integrity_check=ok。HTTPS 浏览器保存和迁移尚待验证。
+- 手机先从原 GitHub Pages 导出备份 JSON，再在服务器版恢复；目前没有迁移手机记录。
+
+## HTTPS 入口已启用（2026-10-09）
+正式地址：https://wrh-server.tail79e8b5.ts.net:8443/ 。仅同一 Tailscale 网络可访问，手机需打开 Tailscale。已通过真实 HTTPS 浏览器登录、状态读取、原数据保存和刷新验证；390px 无横向溢出。当前服务器课时记录为 0 条，等待从手机原页面导出 JSON 并导入。

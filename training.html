@@ -124,6 +124,7 @@
       .layout:has(.empty) .empty{padding:55px 12px}
     }
   </style>
+  <link rel="stylesheet" href="./glass.css">
 </head>
 <body>
 <main class="wrap">
@@ -151,8 +152,7 @@
     <div class="summary" id="summary"></div>
     <div id="logRows"></div>
     <details class="extra-form"><summary>查看全部课时记录</summary><div id="allLogs"></div></details>
-    <label class="rate">每小时工资：<input id="hourlyRate" type="number" min="0" step="0.01" inputmode="decimal"> 元</label>
-    <label class="history">9月15日前历史课时：<input id="historyHours" type="number" min="0" step="0.01" inputmode="decimal"> 小时</label>
+    <p class="rate">月工资：基础5000元（40小时），超出部分65元/小时。月内记录未满40小时也不按比例扣减；统计供结算核对。</p>
     <details class="extra-form">
       <summary>添加临时课程</summary>
       <form class="extra-grid" id="extraForm">
@@ -165,13 +165,29 @@
       </form>
     </details>
     <div class="extra-list" id="extraList"></div>
-    <details class="data-tools"><summary>导出、备份与管理数据</summary><div class="worklog-actions"><button id="exportCsv">导出 CSV</button><button id="exportBackup">备份数据</button><button id="importBackup">恢复备份</button><input id="backupFile" type="file" accept=".json,application/json" hidden><button id="clearLogs">清空记录</button></div></details>
+    <section class="extra-form" aria-labelledby="manualTitle">
+      <h2 id="manualTitle">额外课时补录</h2>
+      <p class="log-empty">选择分钟或小时，填写已算好的课时，保存后计入课时和工资。已记录过的课程不要重复补录。</p>
+      <form class="extra-grid" id="manualForm">
+        <label>归属日期<input id="manualDate" type="date" required></label>
+        <label>已算好的课时<input id="manualHours" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+        <label>单位<select id="manualUnit"><option value="hours">小时</option><option value="minutes">分钟</option></select></label><label class="wide">备注<input id="manualNote" type="text" maxlength="200" placeholder="例如：本月额外课程合计" required></label>
+        <button class="add-extra" type="submit" id="manualSave">保存补录课时</button>
+        <button type="button" id="manualCancel" class="wide" hidden>取消修改，添加新课时</button>
+      </form>
+      <div id="manualList"></div>
+      <div id="manualNotice" class="log-empty" role="status"></div>
+    </section>
+    <details class="data-tools"><summary>导出、备份与管理数据</summary><div class="worklog-actions"><button id="exportCsv">导出 CSV</button><button id="exportBackup">备份数据</button><button id="importBackup">恢复备份</button><input id="backupFile" type="file" accept=".json,application/json" hidden><button id="viewHistory">保存历史</button><button id="importLegacy" hidden>合并旧版页面新记录</button><button id="exportRaw">导出旧版原始数据</button><button id="clearLogs">清空记录</button></div></details>
   </section>
   <details class="settings">
     <summary>课表说明</summary>
     <div>课程按图片中的具体日期和星期显示，老师均为胡翊铭。</div>
   </details>
 </main>
+<dialog id="historyDialog" style="width:min(600px,90vw);max-height:80vh;border:1px solid #cbd3df;border-radius:16px;padding:20px;box-sizing:border-box"><h2>保存历史</h2><p>保留最近 100 次修改前的完整记录。可先下载核对；恢复前也会留存当前版本。</p><div id="historyList"></div><button id="closeHistory">关闭</button></dialog>
+<script src="./state.js"></script>
+<script src="./storage.js"></script>
 <script>
 const slots = [
   ['上午','09:00–12:00'],['上午','09:45–10:45'],['下午','14:10–15:40'],
@@ -193,10 +209,10 @@ const weekNames=['星期日','星期一','星期二','星期三','星期四','�
 const defaultStart='2026-09-07';
 const $=id=>document.getElementById(id);
 let selected = new Date(); selected.setHours(12,0,0,0);
-function readJson(key,fallback){try{const value=JSON.parse(localStorage.getItem(key)||'null');return value && typeof value==='object' ? value : fallback;}catch{return fallback;}}
-let logs = readJson('trainingLogs',{});
-let extraCourses = readJson('extraTrainingCourses',[]);
-if(!Array.isArray(extraCourses)) extraCourses=[];
+let logs = {}, extraCourses = [], savedHistoryHours = '0';
+let storageReady = false;
+const main=document.querySelector('main');
+main.inert=true;
 function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)}
 function parse(s){const [y,m,day]=s.split('-').map(Number);return new Date(y,m-1,day,12)}
 function weekInfo(d){const start=parse(defaultStart); const diff=Math.floor((d-start)/86400000); return {week:Math.floor(diff/7)+1, valid:diff>=0};}
@@ -204,12 +220,27 @@ function active(c,d){return d>=parse(c.date);}
 function hours(c){const [a,b]=c.time.split('–').map(v=>{const [h,m]=v.split(':').map(Number);return h+m/60});return +(b-a).toFixed(2);}
 function logKey(c,date=iso(selected)){return `${date}|${c.code}`;}
 function recordFor(c){const key=logKey(c);return logs[key]||{date:iso(selected),day:c.day,code:c.code,name:c.name,room:c.room,time:c.time,source:c.extra?'临时加课':'固定课程',status:'pending',hours:hours(c)};}
-function writeStorage(key,value){try{const old=localStorage.getItem(key);if(['trainingLogs','extraTrainingCourses'].includes(key)&&old){JSON.parse(old);if(key==='trainingLogs'&&Object.keys(JSON.parse(old)).length)localStorage.setItem('trainingLogsLastGood',old);}localStorage.setItem(key,typeof value==='string'?value:JSON.stringify(value));$('storageNotice').textContent='';if(window.SERVER_MODE)window.scheduleBackend?.queue();return true;}catch{$('storageNotice').textContent='保存失败：现有记录可能损坏或浏览器存储不可用。请先点击“备份数据”，不要清除网站数据。';return false;}}
-function saveLogs(){return writeStorage('trainingLogs',logs);}
-function saveExtraCourses(){return writeStorage('extraTrainingCourses',extraCourses);}
-function updateLog(c,change){const latest=readJson('trainingLogs',{});const key=logKey(c);latest[key]={...(latest[key]||recordFor(c)),...change};if(writeStorage('trainingLogs',latest)){logs=latest;return true;}return false;}
-function historyHours(){return Math.max(0,Number(localStorage.historyHours||0));}
+async function editState(edit,reason='编辑课时') {
+  $('storageNotice').style.color='var(--muted)';
+  $('storageNotice').textContent='正在保存…';
+  try {
+    await ScheduleStore.change(edit,reason);
+    window.scheduleBackend?.queue();
+    return true;
+  } catch(error) {
+    $('storageNotice').style.color='#925e70';
+    $('storageNotice').textContent=`保存失败，原记录未改变：${error.message}。请先备份，不要清除网站数据。`;
+    return false;
+  }
+}
+function updateLog(c,change) {
+  const key=logKey(c),initial=recordFor(c);
+  return editState(state=>{state.logs[key]={...(state.logs[key]||initial),...change};});
+}
+function historyHours(){return Number(savedHistoryHours);}
 function esc(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+function monthlySalary(h){return h>0?5000+Math.max(0,h-40)*65:0;}
+function salaryMonths(){const result={};Object.values(logs).filter(v=>v.status==='done').forEach(v=>{const m=v.date.slice(0,7);result[m]=(result[m]||0)+Number(v.hours||0);});if(historyHours()>0)result['2026-09']=(result['2026-09']||0)+historyHours();return result;}
 function totals(){
   const completed=Object.values(logs).filter(v=>v.status==='done');
   const history=historyHours();
@@ -219,25 +250,30 @@ function totals(){
   const weekStart=new Date(selected); weekStart.setDate(selected.getDate()-((selected.getDay()+6)%7));
   const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
   const week=completed.filter(v=>{const d=parse(v.date);return d>=weekStart&&d<=weekEnd}).reduce((sum,v)=>sum+Number(v.hours||0),0);
-  const rate=Number(localStorage.trainingRate||0);
-  return {total,month,week,pay:total*rate};
+  const months=salaryMonths();
+  return {total,month,week,monthPay:monthlySalary(month),pay:Object.values(months).reduce((sum,h)=>sum+monthlySalary(h),0)};
 }
-function renderLog(list){
+function resetManualForm(){delete $('manualForm').dataset.editKey;$('manualForm').reset();$('manualDate').value=iso(selected);$('manualSave').textContent='保存补录课时';$('manualCancel').hidden=true;}
+function renderLog(list,preserveInput=false){
   const t=totals();
-  $('summary').innerHTML=`<div class="summary-item"><strong>${t.week.toFixed(2)} h</strong><small>本周课时</small></div><div class="summary-item"><strong>${t.month.toFixed(2)} h</strong><small>本月课时</small></div><div class="summary-item"><strong>¥${t.pay.toFixed(2)}</strong><small>累计工资</small></div>`;
-  $('hourlyRate').value=localStorage.trainingRate||'';
-  $('historyHours').value=localStorage.historyHours||'';
+  const manual=Object.entries(logs).filter(([,v])=>v.source==='额外课时补录').sort((a,b)=>b[1].date.localeCompare(a[1].date));
+  $('manualList').innerHTML=manual.map(([key,v])=>`<div class="extra-item"><div><strong>${esc(v.name)} · ${Number(v.hours).toFixed(2)} 小时</strong><small>${esc(v.date)} · 已计入统计</small></div><div class="manual-actions"><button type="button" data-manual-edit="${esc(key)}">修改</button> <button type="button" data-manual-delete="${esc(key)}">删除</button></div></div>`).join('');
+  document.querySelectorAll('[data-manual-edit]').forEach(el=>el.onclick=()=>{const v=logs[el.dataset.manualEdit];$('manualForm').dataset.editKey=el.dataset.manualEdit;$('manualDate').value=v.date;$('manualUnit').value=v.inputUnit||'hours';$('manualHours').value=v.inputValue??v.hours;$('manualNote').value=v.name;$('manualSave').textContent='保存修改';$('manualCancel').hidden=false;$('manualForm').scrollIntoView({block:'center'});});
+  document.querySelectorAll('[data-manual-delete]').forEach(el=>el.onclick=async()=>{const key=el.dataset.manualDelete;if(!confirm('删除这条补录课时？可在保存历史里找回。'))return;if(await editState(s=>{delete s.logs[key];},'删除补录前')){if($('manualForm').dataset.editKey===key)resetManualForm();render();}});
+  $('summary').innerHTML=`<div class="summary-item"><strong>${t.week.toFixed(2)} h</strong><small>本周课时</small></div><div class="summary-item"><strong>${t.month.toFixed(2)} h</strong><small>本月课时</small></div><div class="summary-item"><strong>¥${t.monthPay.toFixed(2)}</strong><small>本月预计工资</small></div><div class="summary-item"><strong>¥${t.pay.toFixed(2)}</strong><small>累计预计工资</small></div>`;
   const all=Object.values(logs).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   $('allLogs').innerHTML=all.length?all.map(v=>`<div class="log-row"><div class="log-name">${esc(v.date)} · ${esc(v.name)}<small>${esc(v.room)} · ${esc(v.time)}</small></div><span>${esc({'done':'已完成','pending':'未记录','leave':'请假','cancel':'取消'}[v.status]||v.status)}</span><span>${Number(v.hours||0).toFixed(2)} h</span></div>`).join(''):'<div class="log-empty">尚无已保存的课时记录</div>';
   const todayExtras=extraCourses.filter(c=>c.date===iso(selected));
-  $('extraList').innerHTML=todayExtras.map(c=>`<div class="extra-item"><div><strong>${esc(c.name)}</strong><small>${esc(c.time)} · ${esc(c.room)}</small></div><button class="delete-extra" data-delete="${c.code}">删除</button></div>`).join('');
-  $('logRows').innerHTML=list.length?list.map(c=>{const v=recordFor(c);return `<div class="log-row"><div class="log-name">${esc(c.name)}<small>${esc(c.room)} · 计划 ${esc(c.time)} · ${hours(c).toFixed(2)} 小时${c.extra?' · 临时加课':''}</small></div><select data-log="${c.code}" class="log-status"><option value="pending" ${v.status==='pending'?'selected':''}>未记录</option><option value="done" ${v.status==='done'?'selected':''}>已完成</option><option value="leave" ${v.status==='leave'?'selected':''}>请假</option><option value="cancel" ${v.status==='cancel'?'selected':''}>取消</option></select><input data-hours="${c.code}" class="log-hours" type="number" min="0" step="0.01" value="${v.hours??hours(c)}" aria-label="实际课时"></div>`}).join(''):`<div class="log-empty">当天没有可记录的课程</div>`;
-  document.querySelectorAll('.log-status').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.log);if(updateLog(c,{status:el.value}))renderLog(list);});
-  document.querySelectorAll('.log-hours').forEach(el=>el.onchange=()=>{const c=list.find(x=>x.code===el.dataset.hours);if(updateLog(c,{hours:Math.max(0,Number(el.value)||0)}))renderLog(list);});
-  document.querySelectorAll('.delete-extra').forEach(el=>el.onclick=()=>{const c=extraCourses.find(x=>x.code===el.dataset.delete);if(!c||!confirm('确定删除这节临时课程吗？'))return;extraCourses=extraCourses.filter(x=>x.code!==c.code);logs=readJson('trainingLogs',{});delete logs[logKey(c,c.date)];saveExtraCourses();saveLogs();render();});
+  $('extraList').innerHTML=todayExtras.map(c=>`<div class="extra-item"><div><strong>${esc(c.name)}</strong><small>${esc(c.time)} · ${esc(c.room)}</small></div><button class="delete-extra" data-delete="${esc(c.code)}">删除</button></div>`).join('');
+  if(preserveInput)return;
+  $('logRows').innerHTML=list.length?list.map(c=>{const v=recordFor(c);return `<div class="log-row"><div class="log-name">${esc(c.name)}<small>${esc(c.room)} · 计划 ${esc(c.time)} · ${hours(c).toFixed(2)} 小时${c.extra?' · 临时加课':''}</small></div><select data-log="${esc(c.code)}" class="log-status"><option value="pending" ${v.status==='pending'?'selected':''}>未记录</option><option value="done" ${v.status==='done'?'selected':''}>已完成</option><option value="leave" ${v.status==='leave'?'selected':''}>请假</option><option value="cancel" ${v.status==='cancel'?'selected':''}>取消</option></select><input data-hours="${esc(c.code)}" class="log-hours" type="number" min="0" step="0.01" value="${v.hours??hours(c)}" aria-label="实际课时"></div>`}).join(''):`<div class="log-empty">当天没有可记录的课程</div>`;
+  document.querySelectorAll('.log-status').forEach(el=>el.onchange=async()=>{const c=list.find(x=>x.code===el.dataset.log);if(await updateLog(c,{status:el.value}))renderLog(list);});
+  document.querySelectorAll('.log-hours').forEach(el=>{el.oninput=async()=>{if(el.value===''||!el.validity.valid)return;const c=list.find(x=>x.code===el.dataset.hours);await updateLog(c,{hours:Number(el.value)});};el.onchange=()=>renderLog(list);});
+  document.querySelectorAll('.delete-extra').forEach(el=>el.onclick=async()=>{const c=extraCourses.find(x=>x.code===el.dataset.delete);if(!c||!confirm('删除这节临时课程及其课时？可在保存历史里找回。'))return;if(await editState(s=>{s.extraCourses=s.extraCourses.filter(x=>x.code!==c.code);delete s.logs[logKey(c,c.date)];},'删除临时课前'))render();});
 }
-function render(){
-  $('extraDate').value=iso(selected);
+function render(preserveInput=false){
+  if(!$('manualDate').value)$('manualDate').value=iso(selected);
+  if(!document.activeElement?.closest('#extraForm'))$('extraDate').value=iso(selected);
   $('date').value=iso(selected); const info=weekInfo(selected); const day=selected.getDay();
   const fixed=courses.filter(c=>c.day===day && active(c,selected));
   const extras=extraCourses.filter(c=>c.date===iso(selected));
@@ -245,25 +281,107 @@ function render(){
   $('title').textContent=`${weekNames[day]} · ${selected.getMonth()+1}月${selected.getDate()}日`;
   $('meta').textContent=info.valid?`第 ${info.week} 周 · ${list.length ? `${list.length} 个课程安排` : '今天没有课程'}`:'课程开始日期之前';
   $('timeline').innerHTML=slots.map(s=>`<div class="slot"><strong>${s[0]}</strong><small>${s[1]}</small></div>`).join('');
-  const fixedCards=fixed.map(c=>`<article class="course" data-code="${c.code}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join('');
-  const extraCards=extras.map((c,i)=>`<article class="course extra-course" data-code="${c.code}" style="--row-start:${10+i};--row-end:${11+i}"><div class="course-head"><h2>${esc(c.name)}</h2><span class="week-tag">临时</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${esc(c.room)}</span><span><b>类型</b>临时加课</span></div></article>`).join('');
+  const fixedCards=fixed.map(c=>`<article class="course" data-code="${esc(c.code)}" style="--row-start:${c.start};--row-end:${c.start+1}"><div class="course-head"><h2>${c.name}</h2><span class="week-tag">${weekNames[c.day]}</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${c.room}</span><span><b>老师</b>胡翊铭</span></div></article>`).join('');
+  const extraCards=extras.map((c,i)=>`<article class="course extra-course" data-code="${esc(c.code)}" style="--row-start:${10+i};--row-end:${11+i}"><div class="course-head"><h2>${esc(c.name)}</h2><span class="week-tag">临时</span></div><div class="course-time">${c.time}</div><div class="course-details"><span><b>地点</b>${esc(c.room)}</span><span><b>类型</b>临时加课</span></div></article>`).join('');
   $('cards').innerHTML=(fixedCards+extraCards)||`<div class="empty">今天没有安排课程</div>`;
-  renderLog(list);
+  renderLog(list,preserveInput);
 }
 $('date').addEventListener('change',e=>{selected=parse(e.target.value);render()});
 $('prev').onclick=()=>{selected.setDate(selected.getDate()-1);render()}; $('next').onclick=()=>{selected.setDate(selected.getDate()+1);render()}; $('today').onclick=()=>{selected=new Date();selected.setHours(12,0,0,0);render()};
-$('hourlyRate').onchange=e=>{if(writeStorage('trainingRate',String(Math.max(0,Number(e.target.value)||0))))render()};
-$('historyHours').onchange=e=>{if(writeStorage('historyHours',String(Math.max(0,Number(e.target.value)||0))))render()};
+ $('manualCancel').onclick=()=>{resetManualForm();$('manualNotice').textContent='';};
+$('manualForm').onsubmit=async e=>{
+  e.preventDefault();
+  const date=$('manualDate').value,inputValue=Number($('manualHours').value),inputUnit=$('manualUnit').value;
+  const h=inputUnit==='minutes'?inputValue/60:inputValue,note=$('manualNote').value.trim(),oldKey=$('manualForm').dataset.editKey;
+  if(!date||!Number.isFinite(h)||h<=0||!note)return;
+  $('manualSave').disabled=true;
+  const ok=await editState(s=>{
+    const code=oldKey?s.logs[oldKey]?.code:'manual-'+crypto.randomUUID();
+    if(!code)throw Error('这条记录已在其他页面删除，请重新载入');
+    if(oldKey)delete s.logs[oldKey];
+    s.logs[date+'|'+code]={date,day:parse(date).getDay(),code,name:note,room:'手动补录',time:'已计算课时',source:'额外课时补录',status:'done',hours:h,inputUnit,inputValue};
+  },oldKey?'修改补录前':'新增补录前');
+  $('manualSave').disabled=false;
+  if(ok){resetManualForm();render();$('manualNotice').textContent='补录已保存，已计入课时和工资统计。';}
+};
 $('extraDate').value=iso(selected);
-$('extraForm').onsubmit=e=>{e.preventDefault();const date=$('extraDate').value,start=$('extraStart').value,end=$('extraEnd').value;if(!date||!start||!end)return;if(end<=start){alert('结束时间必须晚于开始时间');return;}const d=parse(date);extraCourses=readJson('extraTrainingCourses',[]);extraCourses.push({day:d.getDay(),name:$('extraName').value.trim(),room:$('extraRoom').value.trim(),time:`${start}–${end}`,date,code:`extra-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,extra:true});if(!saveExtraCourses())return;selected=d;$('extraForm').reset();$('extraName').value='临时加课';$('extraDate').value=date;render();};
-$('clearLogs').onclick=()=>{if(confirm('确定清空全部课时记录吗？此操作会删除已完成状态和实际课时，请先备份。')){logs={};saveLogs();render()}};
+$('extraForm').onsubmit=async e=>{
+  e.preventDefault();
+  const date=$('extraDate').value,start=$('extraStart').value,end=$('extraEnd').value;
+  if(!date||!start||!end)return;
+  if(end<=start){alert('结束时间必须晚于开始时间');return;}
+  const c={day:parse(date).getDay(),name:$('extraName').value.trim(),room:$('extraRoom').value.trim(),time:`${start}–${end}`,date,code:'extra-'+crypto.randomUUID(),extra:true};
+  const button=$('extraForm').querySelector('button');button.disabled=true;
+  const ok=await editState(s=>{s.extraCourses.push(c);},'新增临时课前');button.disabled=false;
+  if(ok){selected=parse(date);$('extraForm').reset();$('extraName').value='临时加课';$('extraDate').value=date;render();}
+};
+$('clearLogs').onclick=async()=>{
+  if(!confirm('清空全部课时记录？临时课程和历史课时总数保留。清空前会自动保存一个历史版本。'))return;
+  await editState(s=>{s.logs={};},'清空记录前');
+};
 function downloadFile(name,content,type){const a=document.createElement('a');const url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-$('exportBackup').onclick=()=>{const data={format:'training-backup',version:1,exportedAt:new Date().toISOString(),logs:readJson('trainingLogs',{}),extraCourses:readJson('extraTrainingCourses',[]),historyHours:localStorage.getItem('historyHours')||'0',trainingRate:localStorage.getItem('trainingRate')||'0'};downloadFile(`体培课时备份-${iso(new Date())}.json`,JSON.stringify(data,null,2),'application/json');};
-$('importBackup').onclick=()=>{const last=readJson('trainingLogsLastGood',{});const current=readJson('trainingLogs',{});if(Object.keys(last).length>Object.keys(current).length&&confirm(`浏览器内有上次保存的 ${Object.keys(last).length} 条记录。点“确定”合并恢复；点“取消”选择备份文件。`)){logs={...last,...current};if(saveLogs())render();return;}$('backupFile').click();};
-$('backupFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.format!=='training-backup'||data.version!==1||!data.logs||typeof data.logs!=='object'||Array.isArray(data.logs)||!Array.isArray(data.extraCourses))throw Error('文件格式不正确');if(!confirm(`恢复备份中的 ${Object.keys(data.logs).length} 条课时记录？现有记录会按日期与课程合并，同名记录以备份为准。`))return;logs={...readJson('trainingLogs',{}),...data.logs};extraCourses=[...new Map([...readJson('extraTrainingCourses',[]),...data.extraCourses].map(c=>[c.code,c])).values()];if(saveLogs()&&saveExtraCourses()){writeStorage('historyHours',String(data.historyHours??0));writeStorage('trainingRate',String(data.trainingRate??0));render();alert('备份已恢复');}}catch(err){alert(`恢复失败：${err.message}`)}finally{e.target.value=''}};
-window.addEventListener('storage',e=>{if(['trainingLogs','extraTrainingCourses','historyHours','trainingRate'].includes(e.key)){logs=readJson('trainingLogs',{});extraCourses=readJson('extraTrainingCourses',[]);render();}});
-$('exportCsv').onclick=()=>{const rows=[['日期','星期','课程','地点','计划时间','来源','状态','实际课时','工资']];if(historyHours()>0)rows.push(['2026-09-14','星期一','9月15日前历史课时','手动补录','—','历史补录','已完成',historyHours(),(historyHours()*Number(localStorage.trainingRate||0)).toFixed(2)]);Object.values(logs).sort((a,b)=>a.date.localeCompare(b.date)).forEach(v=>rows.push([v.date,weekNames[v.day],v.name,v.room,v.time,v.source||'固定课程',v.status,Number(v.hours||0),(v.status==='done'?Number(v.hours||0)*Number(localStorage.trainingRate||0):0).toFixed(2)]));const csv='\uFEFF'+rows.map(row=>row.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='体培课时记录.csv';a.click();URL.revokeObjectURL(a.href);};
-if(window.SERVER_MODE)document.querySelector('main').style.visibility='hidden';
+function exportState(state,label='体培课时备份'){downloadFile(`${label}-${iso(new Date())}.json`,JSON.stringify(ScheduleData.backup(state),null,2),'application/json');}
+$('exportBackup').onclick=async()=>{try{exportState((await ScheduleStore.refresh()).state);}catch(error){alert(error.message);}};
+window.addEventListener('schedule-legacy-changed',()=>{
+  $('importLegacy').hidden=false;
+  $('storageNotice').textContent='检测到旧版页面的记录有变化。请关闭旧版页面，再在数据管理中“合并旧版页面新记录”；旧记录仍保留。';
+});
+$('importLegacy').onclick=async()=>{
+  if(!confirm('补入旧版页面中新增加的记录？重复项保留当前内容，旧版完整数据另存为历史版本。'))return;
+  try{await ScheduleStore.importLegacy();window.scheduleBackend?.queue();$('importLegacy').hidden=true;}
+  catch(error){alert(`合并未完成：${error.message}。请先导出旧版原始数据。`);}
+};
+$('exportRaw').onclick=()=>{downloadFile(`旧版课时原始数据-${iso(new Date())}.json`,JSON.stringify(ScheduleStore.rawLegacy(),null,2),'application/json');};
+$('importBackup').onclick=()=>$('backupFile').click();
+$('backupFile').onchange=async e=>{
+  const file=e.target.files[0];if(!file)return;
+  try{
+    if(file.size>2*1024*1024)throw Error('备份文件超过2MB');
+    const incoming=ScheduleData.fromBackup(JSON.parse(await file.text()));
+    if(!confirm(`导入 ${Object.keys(incoming.logs).length} 条课时记录？只补入缺少的记录，同一条记录保留当前内容；导入前自动留存历史。`))return;
+    const ok=await editState(s=>{
+      s.logs={...incoming.logs,...s.logs};
+      s.extraCourses=[...new Map([...incoming.extraCourses,...s.extraCourses].map(c=>[c.code,c])).values()];
+      // A partial backup with absent/zero totals must not erase existing totals.
+      if(Number(s.historyHours)===0)s.historyHours=incoming.historyHours;
+      if(Number(s.trainingRate)===0)s.trainingRate=incoming.trainingRate;
+    },'导入备份前');
+    if(ok)alert('备份已合并；重复记录保留当前内容。可在保存历史中下载合并前的数据。');
+  }catch(error){alert(`恢复失败：${error.message}`);}finally{e.target.value='';}
+};
+$('closeHistory').onclick=()=>$('historyDialog').close();
+$('viewHistory').onclick=async()=>{
+  try{
+    const snapshots=await ScheduleStore.history();
+    $('historyList').replaceChildren();
+    if(!snapshots.length)$('historyList').textContent='尚无历史版本。每次改动会自动留存修改前的数据。';
+    for(const snapshot of snapshots){
+      const row=document.createElement('div');row.style.cssText='border-top:1px solid #dce3e9;padding:12px 0';
+      const label=document.createElement('p');label.textContent=`${new Date(snapshot.at).toLocaleString()} · ${snapshot.reason} · ${Object.keys(snapshot.state.logs).length} 条课时`;
+      const download=document.createElement('button');download.textContent='下载';download.onclick=()=>exportState(snapshot.state,'课时历史-'+snapshot.id);
+      const restore=document.createElement('button');restore.textContent='恢复此版本';restore.style.marginLeft='8px';
+      restore.onclick=async()=>{
+        if(!confirm('将课时、临时课程和历史总数恢复为此版本？当前完整数据会先存入保存历史。'))return;
+        if(await editState(s=>Object.assign(s,structuredClone(snapshot.state)),'恢复历史前'))$('historyDialog').close();
+      };
+      row.append(label,download,restore);$('historyList').append(row);
+    }
+    $('historyDialog').showModal();
+  }catch(error){alert(error.message);}
+};
+window.addEventListener('schedule-data',e=>{
+  const doc=e.detail;logs=doc.state.logs;extraCourses=doc.state.extraCourses;savedHistoryHours=doc.state.historyHours;
+  render(document.activeElement?.matches('.log-hours'));
+  $('storageNotice').style.color='var(--muted)';
+  $('storageNotice').textContent=window.SERVER_MODE?'本机副本已保存；同步状态见上方。':`仅本机保存 · ${new Date(doc.updatedAt).toLocaleString()}。换设备或清理浏览器前，请下载 JSON 备份。`;
+});
+ScheduleStore.ready.then(()=>{storageReady=true;main.inert=false;}).catch(error=>{
+  main.inert=false;
+  document.querySelectorAll('form input,form select,form button,.log-hours,.log-status,#clearLogs,#importBackup,#exportBackup,#viewHistory').forEach(el=>el.disabled=true);
+  $('storageNotice').textContent=`无法读取记录，已暂停写入：${error.message}。旧数据保留，请点“导出旧版原始数据”，不要清理浏览器。`;
+});
+$('exportCsv').onclick=()=>{const rows=[['日期','星期','课程','地点','计划时间','来源','状态','实际课时','月结工资（仅月汇总行）']];if(historyHours()>0)rows.push(['2026-09-14','星期一','9月15日前历史课时','手动补录','—','历史补录','已完成',historyHours(),'']);Object.values(logs).sort((a,b)=>a.date.localeCompare(b.date)).forEach(v=>rows.push([v.date,weekNames[v.day],v.name,v.room,v.time,v.source||'固定课程',v.status,Number(v.hours||0),'']));Object.entries(salaryMonths()).sort().forEach(([m,h])=>rows.push([m,'','月度工资汇总','','','月结','',h,monthlySalary(h).toFixed(2)]));const csv='\uFEFF'+rows.map(row=>row.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='体培课时记录.csv';a.click();URL.revokeObjectURL(a.href);};
+
 render();
 if(!window.SERVER_MODE && 'serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});

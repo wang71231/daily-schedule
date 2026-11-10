@@ -20,12 +20,40 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = Path(os.environ.get("SCHEDULE_DB", str(ROOT / "server" / "schedule.db")))
 PASSWORD_HASH = os.environ.get("SCHEDULE_PASSWORD_HASH", "")
+PASSWORD_FILE = DB_PATH.parent / "password.hash"
+PASSWORD_LOCK = Lock()
 COOKIE_SECURE = os.environ.get("SCHEDULE_HTTPS", "0") == "1"
 SESSIONS = {}
 SESSIONS_LOCK = Lock()
 DB_LOCK = Lock()
+LOGIN_LOCK = Lock()
+LOGIN_ATTEMPTS = {}
+
+
+def login_wait(key, now=None):
+    """Reserve an attempt before hashing, including concurrent requests."""
+    now = time.monotonic() if now is None else now
+    with LOGIN_LOCK:
+        for old_key, (_, expiry) in list(LOGIN_ATTEMPTS.items()):
+            if expiry <= now:
+                del LOGIN_ATTEMPTS[old_key]
+        count, expiry = LOGIN_ATTEMPTS.get(key, (0, now + 300))
+        if count >= 5:
+            return max(1, int(expiry - now + 0.999))
+        if len(LOGIN_ATTEMPTS) >= 1000 and key not in LOGIN_ATTEMPTS:
+            return 300
+        LOGIN_ATTEMPTS[key] = (count + 1, expiry)
+        return 0
+
+
+def login_succeeded(key):
+    with LOGIN_LOCK:
+        LOGIN_ATTEMPTS.pop(key, None)
 MAX_BODY = 2 * 1024 * 1024
 FILES = {
+    "/state.js": "state.js", "/storage.js": "storage.js",
+    "/users.html": "users.html",
+    "/glass.css": "glass.css",
     "/": "index.html", "/index.html": "index.html",
     "/training.html": "training.html", "/university.html": "university.html",
     "/manifest.webmanifest": "manifest.webmanifest",
@@ -43,7 +71,8 @@ def make_hash(password):
 
 def verify_password(password):
     try:
-        algorithm, rounds, salt, expected = PASSWORD_HASH.split("$")
+        stored = PASSWORD_FILE.read_text().strip() if PASSWORD_FILE.exists() else PASSWORD_HASH
+        algorithm, rounds, salt, expected = stored.split("$")
         if algorithm != "pbkdf2_sha256":
             return False
         digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), int(rounds))
@@ -175,6 +204,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(404, b"Not found", "text/plain; charset=utf-8")
         name = FILES[path]
         body = (ROOT / name).read_bytes()
+        if path in ("/", "/index.html"):
+            body = body.replace(b"</section>", '<a href="/users.html"><strong>用户管理</strong><span>修改登录密码</span></a></section>'.encode(), 1)
         if path == "/university.html":
             body = body.replace(b"<script>", b"<script>window.SERVER_MODE=true;</script>\n<script>", 1)
         if path == "/training.html":
@@ -189,11 +220,18 @@ class Handler(BaseHTTPRequestHandler):
         if body is None:
             return self.json_response(413, {"error": "body_too_large"})
         if path == "/api/login":
+            # The service is loopback-only behind Tailscale. Do not trust
+            # caller-supplied forwarding headers to bypass throttling.
+            key = self.client_address[0]
+            wait = login_wait(key)
+            if wait:
+                return self.respond(429, f"登录尝试过多，请在{wait}秒后重试。".encode(), "text/plain; charset=utf-8", {"Retry-After": str(wait)})
             from urllib.parse import parse_qs
             password = parse_qs(body.decode(errors="replace")).get("password", [""])[0]
             if not verify_password(password):
                 time.sleep(0.3)
                 return self.respond(403, "密码错误".encode(), "text/plain; charset=utf-8")
+            login_succeeded(key)
             token = secrets.token_urlsafe(32)
             with SESSIONS_LOCK:
                 SESSIONS[token] = {"token": token, "csrf": secrets.token_urlsafe(24), "expires": time.time() + 14 * 86400}
@@ -204,6 +242,31 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(401, {"error": "login_required"})
         if self.headers.get("X-CSRF-Token") != session["csrf"]:
             return self.json_response(403, {"error": "csrf_failed"})
+        if path == "/api/password":
+            wait = login_wait(self.client_address[0])
+            if wait:
+                return self.json_response(429, {"error": f"尝试过多，请{wait}秒后重试"}, {"Retry-After": str(wait)})
+            try:
+                data = json.loads(body)
+                old, new = data["oldPassword"], data["newPassword"]
+                if not isinstance(old, str) or not isinstance(new, str) or not 6 <= len(new) <= 128:
+                    return self.json_response(400, {"error": "新密码需要6至128个字符"})
+                with PASSWORD_LOCK:
+                    if not verify_password(old):
+                        return self.json_response(403, {"error": "原密码不正确"})
+                    temp = PASSWORD_FILE.with_suffix(".tmp")
+                    with open(temp, "w", encoding="utf-8") as file:
+                        os.chmod(temp, 0o600)
+                        file.write(make_hash(new))
+                        file.flush()
+                        os.fsync(file.fileno())
+                    temp.replace(PASSWORD_FILE)
+                    with SESSIONS_LOCK:
+                        SESSIONS.clear()
+                login_succeeded(self.client_address[0])
+                return self.json_response(200, {"ok": True})
+            except (ValueError, KeyError, TypeError):
+                return self.json_response(400, {"error": "请求格式不正确"})
         if path == "/api/logout":
             with SESSIONS_LOCK:
                 SESSIONS.pop(session["token"], None)

@@ -1,3 +1,5 @@
+> 2026-11-10 更新：下文保留早期项目记录。当前存储、工资、测试和托管流程以 [README.md](README.md) 与 [数据可靠性说明](docs/data-reliability.md) 为准。旧 Pages 是本机模式，新托管上线需完成 Cloudflare 登录与部署。
+
 # 每日课表项目交接文档
 
 ## 1. 项目概况
